@@ -1,0 +1,8 @@
+branch: issue-2-layer1-naive-domain
+project-sha: 690394d11f83ac7b623ef28033c0085c4355d21f
+date: 2026-05-25
+issue: 2
+issue-repo: casehubio/life
+flyway-next-v: 100
+design-repo: workspace
+design-section-hashes:
