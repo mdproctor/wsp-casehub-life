@@ -3,7 +3,7 @@
 **Branch:** issue-4-layer3-qhorus-commitment  
 **Issue:** casehubio/life#4  
 **Date:** 2026-05-29  
-**Status:** Approved (rev 2 — post code review)
+**Status:** Approved (rev 3 — post second code review)
 
 ---
 
@@ -47,13 +47,17 @@ This means: the life layer generates a `correlationId` (`UUID.randomUUID().toStr
 
 ## Watchdog Mechanism
 
-Watchdogs are condition-based, not deadline-based. The relevant condition type for commitment tracking is `APPROVAL_PENDING`. `WatchdogEvaluationService.evaluateApprovalPending()` queries `CommitmentStore` for open COMMAND Commitments whose `expiresAt` has passed and fires `WatchdogAlertEvent`.
+Watchdogs are condition-based, not deadline-based. The relevant condition type is `APPROVAL_PENDING`. `WatchdogEvaluationService.evaluateApprovalPending()` queries `CommitmentStore` for open COMMAND Commitments whose `expiresAt` has passed on watched channels, then fires `WatchdogAlertEvent{notificationChannel, conditionType, context}`.
+
+**Key API fact:** `WatchdogAlertEvent` carries no `correlationId`. It carries `notificationChannel` (the channel name the Watchdog monitors) and aggregate context (`ApprovalPendingContext{pendingCount, oldestExpiryAt}`). The evaluator fires one event per Watchdog condition, not one per Commitment — the Commitment-to-record linkage is resolved by the observer querying `LifeCommitmentRecord` by channel name and expired deadline.
+
+**Watchdog registration:** one Watchdog per channel, registered at channel creation in `LifeChannelInitializer` (not per-commitment). Strategies dispatch the COMMAND and persist `LifeCommitmentRecord`; the channel's Watchdog watches for expired Commitments on that channel automatically.
 
 Workflow:
-1. Strategy dispatches `COMMAND` with `correlationId` and `deadline` → qhorus auto-creates `Commitment{expiresAt=deadline, state=OPEN}`
-2. Strategy registers `Watchdog{conditionType=APPROVAL_PENDING, notificationChannel=channelId}` via `WatchdogStore.put()`
-3. `WatchdogScheduler` runs every 60s, calls `evaluateApprovalPending()` → detects expired open Commitments on watched channel → fires `WatchdogAlertEvent`
-4. `LifeWatchdogAlertObserver` observes the event, looks up `LifeCommitmentRecord` by `correlationId`, creates escalation WorkItem
+1. `LifeChannelInitializer.onStart()` creates channel + registers `Watchdog{conditionType=APPROVAL_PENDING, notificationChannel=channelName, thresholdSeconds=0}` per channel
+2. Strategy dispatches `COMMAND` with `correlationId` and `deadline` → qhorus auto-creates `Commitment{expiresAt=deadline, state=OPEN}`
+3. `WatchdogScheduler` runs every 60s → `evaluateApprovalPending()` → finds expired Commitments on watched channels → fires `WatchdogAlertEvent{notificationChannel=channelName}`
+4. `LifeWatchdogAlertObserver` queries `LifeCommitmentRecord` where `channelId=event.notificationChannel() && status=PENDING_RESPONSE && deadline <= now()`, creates escalation WorkItem per record found
 
 `WatchdogStore` is blocking (`put(Watchdog)` synchronous). `ReactiveWatchdogService` exists but is not needed here.
 
@@ -111,8 +115,8 @@ record CommitmentRequest(
 
 // for POST /life-oversight-gates
 record OversightGateRequest(
-    String                deadline_iso,  // Instant — when oversight expires
-    CreateLifeTaskRequest pendingTask    // task to create on RESPONSE
+    Instant               deadline,     // when oversight gate expires
+    CreateLifeTaskRequest pendingTask   // task to create on RESPONSE
 ) {}
 ```
 
@@ -229,19 +233,19 @@ class LifeChannelInitializer {
     static final String OVERSIGHT_CHANNEL  = "life/oversight";
 
     void onStart(@Observes StartupEvent ev) {
-        ensureChannel(DELEGATION_CHANNEL,
+        ensureChannelWithWatchdog(DELEGATION_CHANNEL,
             List.of("household-admin", "household-member"), null);
-        ensureChannel(OVERSIGHT_CHANNEL,
+        ensureChannelWithWatchdog(OVERSIGHT_CHANNEL,
             List.of("household-admin"), "COMMAND,RESPONSE");
     }
 
     String ensureActorChannel(UUID externalActorId) {
-        String id = "life/actor/" + externalActorId;
-        ensureChannel(id, List.of("household-admin", "household-member"), null);
-        return id;
+        String name = "life/actor/" + externalActorId;
+        ensureChannelWithWatchdog(name, List.of("household-admin", "household-member"), null);
+        return name;
     }
 
-    private void ensureChannel(String name, List<String> writers, String allowedTypes) {
+    private void ensureChannelWithWatchdog(String name, List<String> writers, String allowedTypes) {
         // ChannelService.create() does NOT register in ChannelGateway (GE-20260526-5247f2).
         // Always call initChannel() after create or find.
         channelService.findByName(name).ifPresentOrElse(
@@ -252,6 +256,14 @@ class LifeChannelInitializer {
                     name, name, ChannelSemantic.APPEND,
                     writersStr, null, allowedTypes);
                 channelGateway.initChannel(ch.id, new ChannelRef(ch.id, ch.name));
+                // One APPROVAL_PENDING Watchdog per channel — monitors all Commitments on it.
+                // thresholdSeconds=0: fire as soon as any Commitment.expiresAt passes.
+                var w = new Watchdog();
+                w.conditionType = "APPROVAL_PENDING";
+                w.notificationChannel = name;
+                w.thresholdSeconds = 0;
+                w.createdBy = "life-system";
+                watchdogStore.put(w);
             }
         );
     }
@@ -299,18 +311,17 @@ class DelegationCommitmentStrategy implements LifeCommitmentStrategy {
         var dc = (DelegationContext) ctx;
         String correlationId = UUID.randomUUID().toString();
 
+        // DELEGATION_CHANNEL is pre-initialized at startup — use constant directly.
+        // Sender is "life-system": auth not yet wired (auth-retrofit-readiness protocol).
         messageService.dispatch(MessageDispatch.builder(
-                channelInitializer.ensureChannel(DELEGATION_CHANNEL, ...),
-                currentPrincipal.actorId(), COMMAND,
+                DELEGATION_CHANNEL, "life-system", COMMAND,
                 "Task delegation: " + dc.workItem().title())
             .correlationId(correlationId)
             .target(dc.request().delegateTo())
             .deadline(dc.request().deadline())
             .build());
-
-        // Auto-created qhorus Commitment{expiresAt=deadline} enables APPROVAL_PENDING
-        watchdogStore.put(new Watchdog(APPROVAL_PENDING, DELEGATION_CHANNEL,
-            dc.request().deadline()));
+        // dispatch() auto-creates qhorus Commitment{expiresAt=deadline, state=OPEN}.
+        // Channel's APPROVAL_PENDING Watchdog monitors for expiry — no per-call registration needed.
 
         var record = new LifeCommitmentRecord();
         record.id = UUID.randomUUID();
@@ -333,23 +344,24 @@ class DelegationCommitmentStrategy implements LifeCommitmentStrategy {
 
 Applies when: `context instanceof ContractorContext cc && cc.request().deadline() != null`
 
-- `ensureActorChannel(externalActor.id())` — creates per-actor channel on demand
-- Dispatches COMMAND with `correlationId` + `deadline` — qhorus auto-creates `Commitment{expiresAt=deadline}`
-- Registers `APPROVAL_PENDING` Watchdog on actor channel
-- Persists `LifeCommitmentRecord{mode=CONTRACTOR, externalActorId}`
+- `channelInitializer.ensureActorChannel(externalActor.id())` — creates per-actor channel and its Watchdog on demand; returns channel name
+- Dispatches COMMAND with sender `"life-system"`, `correlationId`, `deadline` — qhorus auto-creates `Commitment{expiresAt=deadline}`
+- Channel's `APPROVAL_PENDING` Watchdog (registered by `ensureActorChannel`) monitors for expiry — no per-call registration needed
+- Persists `LifeCommitmentRecord{mode=CONTRACTOR, externalActorId, channelId}`
 
 ### `OversightGateStrategy`
 
 Applies when: `context instanceof OversightContext`
 
 - No WorkItem — none exists yet; `LifeCommitmentRecord.workItemId = null` until RESPONSE
-- Dispatches COMMAND to `life/oversight` with `correlationId` + `deadline`
+- **Duplicate gate guard:** query `LifeCommitmentRecord` for existing `mode=OVERSIGHT, status=PENDING_RESPONSE` with matching `pendingTask.title + domain` hash. If found, throw `CommitmentConflictException` (caught by resource layer → 409).
+- Dispatches COMMAND to `life/oversight` with sender `"life-system"`, `correlationId`, `deadline`
 - qhorus auto-creates `Commitment{expiresAt=deadline}` on oversight channel
-- Registers `APPROVAL_PENDING` Watchdog on oversight channel
+- Channel's `APPROVAL_PENDING` Watchdog (registered at startup) monitors for expiry
 - Serializes `pendingTask` to JSON via ObjectMapper
 - Persists `LifeCommitmentRecord{mode=OVERSIGHT, workItemId=null, pendingTaskJson}`
 
-**Duplicate gate guard:** before dispatch, query `LifeCommitmentRecord` for any `mode=OVERSIGHT, status=PENDING_RESPONSE` with matching `pendingTask` identity. If found, return 409 Conflict. (Note: exact deduplication key for `pendingTask` is hash of title+domain — documented as best-effort; full uniqueness enforcement is a later-layer concern.)
+**`CommitmentConflictException`:** unchecked exception in `app/`. Resource layer catches it and returns 409. Same pattern used for duplicate DELEGATION/CONTRACTOR commitment detection.
 
 **Protocol invariants (PP-20260522-3dca14):** COMMAND requires no reply fields — builder accepts without `inReplyTo`. ✓
 
@@ -412,14 +424,19 @@ class LifeWatchdogAlertObserver {
     @ObservesAsync
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     void onAlert(WatchdogAlertEvent event) {
-        records.findByCorrelationId(event.correlationId())
-            .filter(r -> r.status == PENDING_RESPONSE)
-            .ifPresent(record -> {
-                createEscalationTask(record);
-                record.status = EXPIRED;
-                record.updatedAt = Instant.now();
-                record.persist();
-            });
+        if (event.conditionType() != WatchdogConditionType.APPROVAL_PENDING) return;
+
+        // WatchdogAlertEvent carries notificationChannel, not correlationId.
+        // The evaluator fires one event per watched channel (not per Commitment).
+        // Query all expired PENDING_RESPONSE records on this channel.
+        List<LifeCommitmentRecord> expired = records.findExpiredPendingByChannel(
+            event.notificationChannel(), Instant.now());
+
+        for (LifeCommitmentRecord record : expired) {
+            createEscalationTask(record);
+            record.status = EXPIRED;
+            record.updatedAt = Instant.now();
+        }
     }
 
     private void createEscalationTask(LifeCommitmentRecord record) {
@@ -429,27 +446,10 @@ class LifeWatchdogAlertObserver {
             case OVERSIGHT  -> "Oversight gate expired — request not approved";
         };
 
-        LifeDomain domain = switch (record.mode) {
-            case DELEGATION -> LifeDomain.HOUSEHOLD;
-            case CONTRACTOR -> LifeDomain.CONTRACTOR_COORDINATION;
-            case OVERSIGHT  -> oversightDomain(record);
-        };
-
+        // CreateLifeTaskRequest(templateRef, title, externalActorId, deadline)
+        // "life-escalation" WorkItemTemplate seeded at V102 alongside existing templates.
         lifeTaskService.createTask(new CreateLifeTaskRequest(
-            title, domain, null, WorkItemPriority.HIGH, null));
-        // Escalation WorkItem uses the ESCALATION WorkItemTemplate
-        // (seeded at V102 alongside the existing templates)
-    }
-
-    private LifeDomain oversightDomain(LifeCommitmentRecord record) {
-        try {
-            CreateLifeTaskRequest pending = json.readValue(
-                record.pendingTaskJson, CreateLifeTaskRequest.class);
-            return pending.domain();
-        } catch (JsonProcessingException e) {
-            log.warn("Could not deserialize pendingTaskJson for oversight domain — defaulting to FINANCE");
-            return LifeDomain.FINANCE;
-        }
+            "life-escalation", title, null, null));
     }
 }
 ```
@@ -477,14 +477,15 @@ All resources: `@Blocking @ApplicationScoped` (PP-20260526-d0b921).
 
 Applies commitment to an existing task (DELEGATION or CONTRACTOR).
 
-Pre-conditions checked in service before building context:
+Pre-conditions checked in `LifeCommitmentService` before building context:
 - Task exists → 404 if not
+- XOR validation: exactly one of `delegateTo` or `externalActorId` must be non-null, and `deadline` must be non-null — if invalid, throw `IllegalArgumentException` (resource maps to 422). This check runs before strategy dispatch so malformed input never reaches the strategy.
 - `externalActorId` exists if provided → 422 if not found (consistent with `LifeTaskService.createTask()`)
-- No existing `PENDING_RESPONSE` commitment on this `workItemId` → 409 Conflict if duplicate
+- No existing `PENDING_RESPONSE` commitment on this `workItemId` → throw `CommitmentConflictException` (resource maps to 409)
 
-**Request:** `CommitmentRequest` — must have `delegateTo` XOR (`externalActorId` + `deadline`)  
-**Response:** `CommitmentOutcome`  
-**Errors:** 404 task not found; 409 duplicate commitment; 422 invalid request or actor not found
+**Request:** `CommitmentRequest{delegateTo XOR externalActorId, deadline}`  
+**Response:** `CommitmentOutcome{recordId, correlationId, mode, status}`  
+**Errors:** 404 task not found; 409 duplicate commitment (`CommitmentConflictException`); 422 invalid request or actor not found
 
 ### `POST /life-oversight-gates`
 
@@ -492,8 +493,8 @@ Creates a pre-approval gate before a task exists.
 
 Pre-conditions: no existing `PENDING_RESPONSE` OVERSIGHT gate for matching `pendingTask` title+domain → 409 Conflict (best-effort dedup).
 
-**Request:** `OversightGateRequest{pendingTask, deadline}`  
-**Response:** `CommitmentOutcome{workItemId=null, mode=OVERSIGHT, status=PENDING_RESPONSE}`
+**Request:** `OversightGateRequest{deadline: Instant, pendingTask: CreateLifeTaskRequest}`  
+**Response:** `CommitmentOutcome{recordId=<uuid>, correlationId=<uuid>, mode=OVERSIGHT, status=PENDING_RESPONSE}` — no `workItemId` in `CommitmentOutcome`; the oversight gate has no task until RESPONSE arrives
 
 ### `GET /life-tasks/{id}` (extended)
 
@@ -503,7 +504,7 @@ Pre-conditions: no existing `PENDING_RESPONSE` OVERSIGHT gate for matching `pend
 
 ## Known Limitations
 
-**Dual-datasource atomicity:** `MessageService.dispatch()` writes to the qhorus datasource; `LifeCommitmentRecord.persist()` writes to the life datasource. These are separate transactions. If `persist()` fails after `dispatch()` succeeds, a COMMAND is live in qhorus with no local tracking record. The Watchdog's `WatchdogAlertEvent` will fire, `LifeWatchdogAlertObserver.findByCorrelationId()` will return empty, and the escalation will be silently dropped. Proper fix is an outbox pattern (persist intended dispatch to life datasource first, publish from there) — deferred beyond Layer 3.
+**Dual-datasource atomicity:** `MessageService.dispatch()` writes to the qhorus datasource; `LifeCommitmentRecord.persist()` writes to the life datasource. These are separate transactions. If `persist()` fails after `dispatch()` succeeds, a COMMAND is live in qhorus with no local tracking record. When `WatchdogAlertEvent` fires for that channel, `LifeWatchdogAlertObserver` queries `LifeCommitmentRecord` by channel + deadline — the missing record is silently not found, and the escalation is dropped. Proper fix is an outbox pattern (persist intended dispatch to life datasource first, publish from there) — deferred beyond Layer 3.
 
 **Double oversight gate:** two `POST /life-oversight-gates` calls with the same `pendingTask` title+domain are deduped by a best-effort hash check. Two gates with different titles for logically identical requests can both RESPONSE and create two WorkItems. Full idempotency requires a richer deduplication key — deferred.
 
@@ -575,7 +576,11 @@ End-to-end showcase (mirrors `ShowcaseScenarioTest` from Layer 2):
 | Strategy CDI injection | `@All List<LifeCommitmentStrategy>` — collect-all with exactness assertion |
 | SPI location | `app/` only — `api/` cannot reference JPA types from app/ (circular dep) |
 | Channel allowedTypes | Oversight: `"COMMAND,RESPONSE"` — normative enforcement via `ChannelService.create()` |
-| Watchdog registration | `WatchdogStore.put()` (blocking) with `conditionType=APPROVAL_PENDING` |
+| Watchdog registration | One per channel at creation — `WatchdogStore.put()` (blocking), `conditionType=APPROVAL_PENDING`, `thresholdSeconds=0` |
+| Watchdog alert linkage | `WatchdogAlertEvent` carries `notificationChannel`, not `correlationId` — observer queries `LifeCommitmentRecord` by channel + deadline |
+| Escalation call | `new CreateLifeTaskRequest("life-escalation", title, null, null)` — 4 fields: templateRef, title, externalActorId, deadline |
+| 409 propagation | `CommitmentConflictException` (unchecked) thrown from strategy, caught in resource → 409 |
+| XOR validation | Checked in service before strategy dispatch — `IllegalArgumentException` → 422 |
 
 ---
 
