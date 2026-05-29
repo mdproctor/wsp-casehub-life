@@ -1,60 +1,51 @@
-# Handoff — casehub-life Layer 2 complete
+# Handoff — casehub-life Layer 3 complete
 2026-05-29
 
 ## Last Session
 
-Layer 2 designed, implemented, reviewed, and closed. The brainstorming session
-surfaced a fundamental domain model correction: `HouseholdTask`, `LifeGoal`, and
-`LifeEvent` were removed as they duplicated foundation primitives. `LifeTaskContext`
-(domain supplement) replaced them. `POST /life-tasks` creates WorkItem + LifeTaskContext
-atomically. `LifeSlaBreachPolicy` enforces stateless two-tier escalation. 38 tests, 0 failures.
-Branch squashed (20→7 commits), pushed to casehubio/life main.
+Layer 3 (casehub-qhorus commitment lifecycle) designed, implemented, reviewed (3 spec rounds + code review), and closed. Three accountability patterns: family delegation (COMMAND to household-member + Watchdog), contractor follow-up (COMMAND on per-actor channel + Watchdog), oversight gate (COMMAND to life/oversight; WorkItem created only on RESPONSE). 63 tests, 0 failures. Squashed to 1 commit, pushed to casehubio/life main.
 
 ## Immediate Next Step
 
-Start Layer 3: casehub-qhorus commitment lifecycle. Run `work-start` for life#4.
+Start Layer 4: casehub-ledger tamper-evident audit. Run `/work` for life#5.
 
-Layer 3 adds: family delegation (COMMAND to household-member), contractor follow-up
-(COMMAND + Watchdog), oversight gates for major financial decisions
-(COMMAND to household-admin; no action until RESPONSE received).
+Layer 4 adds: tamper-evident Merkle records for health decisions, financial decisions, legal actions. GDPR Art.17 for personal data held about contractors and dependents.
 
 ## Cross-Module
 
 **Blocked by:**
-- `casehub-engine` — SNAPSHOT has broken internal package refactor (engine#379, engine#380).
-  Layer 5 deps removed from pom.xml until fixed. Not blocking Layer 3.
+- `casehub-engine` — SNAPSHOT has broken internal package refactor (engine#379, engine#380). Layer 5 deps removed from pom.xml. Not blocking Layer 4.
 
 ## Design Decisions — Carry Forward
 
-- `HouseholdTask`, `LifeGoal`, `LifeEvent` are GONE — they were foundation primitive wrappers
-- Domain model: `ExternalActor` (JPA entity) + `LifeTaskContext` (supplement) only
-- `WorkItemPriority` enum: no NORMAL — use MEDIUM
-- `Response.Status.UNPROCESSABLE_ENTITY` doesn't exist in current JAX-RS version — use raw 422
-- `@BeforeEach @Transactional` for WorkItemTemplate seeding in tests (PP-20260528-913df2)
+- `LifeCommitmentStrategy` SPI lives in `app/`, not `api/` — context types reference JPA entities (circular dep if in api/)
+- Oversight gate: `workItemId` is null until RESPONSE — no WorkItem for unapproved work
+- `WatchdogAlertEvent` has NO `correlationId` — has `notificationChannel` (channel name String). Observer queries `LifeCommitmentRecord` by channel name.
+- `MessageDispatch.Builder` requires `.actorType()` — throws `IllegalArgumentException: actorType is required` at `build()` if missing. Use `ActorType.SYSTEM` for life-system.
+- `delegateTo` column repurposed as dedup key for OVERSIGHT mode — partial unique index enforces dedup
+- casehub-work SNAPSHOT drift: `SelectionContext` constructor changes between SNAPSHOTs → `NoSuchMethodError`. Fix: `mvn install -DskipTests -pl api,core,deployment -am -f /path/to/casehub-work/pom.xml`
 - Layer 5 engine deps deferred — pom.xml comment explains why
 
 ## Open Issues Filed This Session
 
 | Issue | Repo | What |
 |-------|------|------|
-| engine#379 | casehubio/engine | SignalReceivedEvent missing from engine jar |
-| engine#380 | casehubio/engine | work-adapter Jandex references old engine internal packages |
-| parent#79 | casehubio/parent | AGENTIC-HARNESS-GUIDE: domain entity discipline |
-| parent#86 | casehubio/parent | casehub-life.md: Layer 2 complete, domain model correction |
-| life#15 | casehubio/life | Refactor: extract shared WorkItemTemplate test fixture |
+| life#16 | casehubio/life | docs/specs/life-automation.md layer table is stale |
+| life#17 | casehubio/life | LifeWatchdogAlertObserver escalation integration test gap |
+| life#18 | casehubio/life | REST resource consistency (@Produces/@Consumes, 201 for commitment) |
+| parent#96 | casehubio/parent | casehub-life.md: Layer 3 complete |
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #4 | Layer 3: + casehub-qhorus commitment lifecycle | M | Med | Start here |
-| #5 | Layer 4: + casehub-ledger tamper-evident audit | M | Med | Blocked by #4 |
+| #5 | Layer 4: + casehub-ledger tamper-evident audit | M | Med | Start here |
+| #6 | Layer 5: + casehub-engine CasePlanModel workflows | L | High | Blocked by engine#379, #380 |
 
 ## References
 
-- Spec: `docs/specs/2026-05-27-layer2-casehub-work-sla.md`
-- LAYER-LOG: `LAYER-LOG.md` (Layer 1 + Layer 2 marked complete)
-- ADR: `docs/adr/0001-life-domain-model-foundation-primitives-over-wrappers.md`
-- Blog: `blog/2026-05-28-mdp01-layer2-domain-model-pivot.md`
-- Protocols: PP-20260527-da1f66 (domain supplement), PP-20260528-913df2 (template test seeding)
-- Garden: GE-20260528-d4b81d (engine SNAPSHOT), GE-20260528-35a81c (WorkItemPriority NORMAL), GE-20260528-936918 (UNPROCESSABLE_ENTITY), GE-20260528-3d3847 (@Transactional static), GE-20260528-c968e2 (ExpiryLifecycleService injection)
+- Spec: `docs/specs/2026-05-29-layer3-qhorus-commitment.md`
+- LAYER-LOG: `LAYER-LOG.md` (Layer 1–3 marked complete)
+- Blog: `blog/2026-05-29-mdp01-layer3-qhorus-commitment.md`
+- Garden: GE-20260529-bfa5d5 (WatchdogAlertEvent no correlationId), GE-20260529-e32a4d (MessageDispatch actorType required)
+- Protocol: PP-20260529-e30ebd (life-domain channel naming)
