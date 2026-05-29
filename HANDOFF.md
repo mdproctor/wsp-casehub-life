@@ -1,9 +1,11 @@
-# Handoff — casehub-life Layer 3 complete
+# Handoff — casehub-life cleanup + Layer 4 next
 2026-05-29
 
 ## Last Session
 
-Layer 3 (casehub-qhorus commitment lifecycle) designed, implemented, reviewed (3 spec rounds + code review), and closed. Three accountability patterns: family delegation (COMMAND to household-member + Watchdog), contractor follow-up (COMMAND on per-actor channel + Watchdog), oversight gate (COMMAND to life/oversight; WorkItem created only on RESPONSE). 63 tests, 0 failures. Squashed to 1 commit, pushed to casehubio/life main.
+Completed all S/XS backlog items: fixed stale tutorial layer table in `docs/specs/life-automation.md` (#16), added 7-test `LifeWatchdogAlertObserver` integration test suite + NPE fix in `createEscalationTask()` for null `delegateTo` (#17), added `@Produces/@Consumes` class-level to `ExternalActorResource` and changed commitment creation endpoints from 200 → 201 (#18). 57 tests passing. All three issues closed, branch merged to casehubio/life main.
+
+Key discovery: Flyway disabled in tests (`migrate-at-start=false`) — WorkItemTemplates must be seeded programmatically in `@BeforeEach`. Pattern now in CLAUDE.md.
 
 ## Immediate Next Step
 
@@ -13,27 +15,15 @@ Layer 4 adds: tamper-evident Merkle records for health decisions, financial deci
 
 ## Cross-Module
 
-**Blocked by:**
-- `casehub-engine` — SNAPSHOT has broken internal package refactor (engine#379, engine#380). Layer 5 deps removed from pom.xml. Not blocking Layer 4.
+*Unchanged — `git show HEAD~1:HANDOFF.md`*
 
 ## Design Decisions — Carry Forward
 
-- `LifeCommitmentStrategy` SPI lives in `app/`, not `api/` — context types reference JPA entities (circular dep if in api/)
-- Oversight gate: `workItemId` is null until RESPONSE — no WorkItem for unapproved work
-- `WatchdogAlertEvent` has NO `correlationId` — has `notificationChannel` (channel name String). Observer queries `LifeCommitmentRecord` by channel name.
-- `MessageDispatch.Builder` requires `.actorType()` — throws `IllegalArgumentException: actorType is required` at `build()` if missing. Use `ActorType.SYSTEM` for life-system.
-- `delegateTo` column repurposed as dedup key for OVERSIGHT mode — partial unique index enforces dedup
-- casehub-work SNAPSHOT drift: `SelectionContext` constructor changes between SNAPSHOTs → `NoSuchMethodError`. Fix: `mvn install -DskipTests -pl api,core,deployment -am -f /path/to/casehub-work/pom.xml`
-- Layer 5 engine deps deferred — pom.xml comment explains why
+*Unchanged — `git show HEAD~1:HANDOFF.md`*
 
-## Open Issues Filed This Session
+## What's Left
 
-| Issue | Repo | What |
-|-------|------|------|
-| life#16 | casehubio/life | docs/specs/life-automation.md layer table is stale |
-| life#17 | casehubio/life | LifeWatchdogAlertObserver escalation integration test gap |
-| life#18 | casehubio/life | REST resource consistency (@Produces/@Consumes, 201 for commitment) |
-| parent#96 | casehubio/parent | casehub-life.md: Layer 3 complete |
+- `parent#96` — casehub-life.md: Layer 3 complete (cross-repo issue, already filed) · XS · Low
 
 ## What's Next
 
@@ -47,5 +37,5 @@ Layer 4 adds: tamper-evident Merkle records for health decisions, financial deci
 - Spec: `docs/specs/2026-05-29-layer3-qhorus-commitment.md`
 - LAYER-LOG: `LAYER-LOG.md` (Layer 1–3 marked complete)
 - Blog: `blog/2026-05-29-mdp01-layer3-qhorus-commitment.md`
-- Garden: GE-20260529-bfa5d5 (WatchdogAlertEvent no correlationId), GE-20260529-e32a4d (MessageDispatch actorType required)
+- Garden: GE-20260529-bfa5d5, GE-20260529-e32a4d, GE-20260519-114395 (CDI proxy observer testing)
 - Protocol: PP-20260529-e30ebd (life-domain channel naming)
