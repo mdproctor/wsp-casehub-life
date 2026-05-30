@@ -1,15 +1,1 @@
-# Design Journal — issue-4-layer3-qhorus-commitment
-
-### 2026-05-29 · §Domain Model · §Architecture
-
-Layer 3 adopts casehub-qhorus for commitment lifecycle tracking. The central design decision was how to attach life-domain context to native qhorus Commitments without duplicating the foundation's obligation semantics. The chosen pattern is a `LifeCommitmentRecord` supplement (same approach as `LifeTaskContext` from Layer 2) — keyed by `correlationId` which links to the native qhorus `Commitment.correlationId`. `LifeCommitmentRecord.workItemId` is intentionally null for OVERSIGHT mode until a household-admin RESPONSE fulfills the gate and triggers WorkItem creation.
-
-The commitment strategy is a sealed context hierarchy (`DelegationContext`, `ContractorContext`, `OversightContext`) dispatched via an internal SPI (`LifeCommitmentStrategy`). This SPI lives in `app/` not `api/` because the context types reference JPA entities — placing it in `api/` would create a circular Maven dependency. Three implementations registered as CDI `@ApplicationScoped` beans are collected via `Instance<LifeCommitmentStrategy>` in `LifeCommitmentService`, which asserts exactly one match per request (exclusivity invariant).
-
-Channel topology is domain-scoped: `life/delegation` (shared, family delegation), `life/oversight` (shared, oversight gates — COMMAND+RESPONSE enforced via allowedTypes), and `life/actor/{externalActorId}` (per-actor, contractor commitments). These are intentionally different from the qhorus normative 3-channel mesh — life channels are household coordination channels, not agent orchestration channels. One APPROVAL_PENDING Watchdog per channel, registered at channel creation with `thresholdSeconds=0`, monitors for expired Commitments on that channel. `WatchdogAlertEvent.notificationChannel()` carries the channel name string; `LifeWatchdogAlertObserver` queries `LifeCommitmentRecord` by that channel name to find expired records.
-
-The oversight gate breaks the Layer 2 pattern: no WorkItem is created until household-admin RESPONSE arrives. `LifeOversightResponseObserver` (implements `MessageObserver`) bridges the RESPONSE to task creation — it runs with `@Transactional(REQUIRES_NEW)` because `MessageService.dispatch()` calls observers synchronously inside the qhorus dispatch transaction, and the observer needs its own transaction boundary. `LifeWatchdogAlertObserver` uses `@ObservesAsync` because qhorus fires `WatchdogAlertEvent` via `fireAsync()`.
-
-The `delegateTo` field in `LifeCommitmentRecord` is repurposed as a dedup key (title:templateRef hash) for OVERSIGHT mode — a semantic overload acknowledged as a known design trade-off, mitigated by a partial unique index on (delegate_to) WHERE mode = 'OVERSIGHT' AND status = 'PENDING_RESPONSE'. A dedicated `oversight_key` column would be cleaner but adds schema complexity for a single-mode concern.
-
-Flyway: V103 creates `life_commitment_record` (default datasource, life domain); V104 seeds the `life-escalation` WorkItemTemplate for escalation tasks created by the Watchdog alert observer.
+# Design Journal — issue-6-layer5-engine-workflows
