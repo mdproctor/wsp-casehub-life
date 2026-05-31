@@ -1,38 +1,45 @@
-# Handoff — casehub-life Layer 4 done, on main
-2026-05-30
+# Handoff — casehub-life Layer 5 implemented, on branch issue-6-layer5-engine-workflows
+2026-05-31
 
 ## Last Session
 
-Layer 4 (casehub-ledger tamper-evident audit) fully implemented, reviewed, squashed,
-and merged to main+upstream. 4 LedgerEntry subclasses, unified LifeLedgerWriter,
-LifeDecisionLedgerObserver CDI observer, GDPR Art.17 erasure. 90 tests pass.
-Tutorial framing stripped from CLAUDE.md and LAYER-LOG.md. Issues #5, #10, #19 closed.
+Layer 5 (casehub-engine) implemented: 8 case definitions (YAML + fluent DSL + FuncDSL
+workers), LifeCaseTracker entity, LifeCaseService (three-phase), LifeCaseResource,
+scope retrofit, observer adaptation. 67 unit/DSL tests pass. @QuarkusTest integration
+tests blocked on engine#408 (stale SNAPSHOT API signatures). Two new protocols created
+(case-definition-layers revision, worker-function-execution-model). 4 garden entries
+submitted. Issues filed: engine#408, aml#45, aml#46, clinical#50, devtown#60, parent#119.
 
 ## Immediate Next Step
 
-Layer 5 (`casehub-engine` CasePlanModel workflows) is the next layer, but engine deps
-are removed (engine#379/#380 — now fixed in source, need local build). Run
-`mvn install -DskipTests -f ../engine/pom.xml` to install the fixed SNAPSHOT before
-starting Layer 5.
+Resolve engine#408 — engine source needs compilation fixes in `QuartzWorkerExecutionJobListener`
+(CaseLifecycleEvent 7→8 params) and `PlanItemStoreContractTest` (PlanItemSaveRequest 7→8 fields).
+Then `mvn install -Dmaven.test.skip=true -f ../engine/pom.xml` to rebuild SNAPSHOT. After that,
+re-enable @QuarkusTest integration tests and run the full code review.
+
+## Cross-Module
+
+**Blocked by:**
+- `casehub-engine` — engine#408 compilation errors prevent SNAPSHOT rebuild · S · Low
 
 ## What's Left
 
-- `parent#114` — sync `docs/repos/casehub-life.md` for Layers 3+4 completion (supersedes parent#96) · XS · Low
-- `parent#96` — Layer 3 completion update (superseded by parent#114) · XS · Low
-- GE-20260530-da427e — garden push blocked by pre-push hook; committed locally, needs push · XS · Low
+- Code review (superpowers:requesting-code-review) — deferred until engine#408 resolved · M · Med
+- LAYER-LOG.md Layer 5 entry — write after code review + merge · S · Low
+- `parent#114` — sync `docs/repos/casehub-life.md` for Layers 3–5 · XS · Low
+- `parent#96` — superseded by parent#114 · XS · Low
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #6 | Layer 5: casehub-engine CasePlanModel workflows | L | High | Blocked until engine SNAPSHOT installed locally |
-| #11 | Trust dimension score fields on ExternalActor | S | Med | Blocked by Layer 5/6 (needs engine) |
-| #7 | Layer 6: Trust routing | L | High | Blocked by Layer 5 |
-| #20 | Explore ActionRiskClassifier oversight gate | M | High | Research / design — no blocker |
+| #11 | Trust dimension score fields on ExternalActor | S | Med | Blocked by Layer 6 |
+| #7 | Layer 6: Trust routing | L | High | Blocked by Layer 5 merge |
+| #20 | Explore ActionRiskClassifier oversight gate | M | High | Research — no blocker |
 
 ## References
 
-- Spec: `docs/specs/2026-05-30-layer4-casehub-ledger-design.md`
-- LAYER-LOG: Layer 4 entry complete with full key files/wiring/gotchas/pattern to replicate
-- Plan: `plans/attic/issue-5-layer4-casehub-ledger/2026-05-30-layer4-casehub-ledger.md`
-- Garden: GE-20260530-da427e (multi-PU gotcha), GE-20260511-b6f903 revised (@PrePersist)
+- Spec: `docs/specs/2026-05-31-layer5-casehub-engine-design.md`
+- Plan: `plans/2026-05-31-layer5-casehub-engine.md`
+- Garden: GE-20260531-1e51d4, GE-20260531-4e21c1, GE-20260531-d896bf, GE-20260531-e5a1aa
+- Protocols: PP-20260518 (revised), PP-20260531-worker-func-exec (new)
