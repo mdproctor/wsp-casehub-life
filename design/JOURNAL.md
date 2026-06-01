@@ -1,15 +1,27 @@
-# Design Journal — issue-4-layer3-qhorus-commitment
+# Design Journal — issue-6-layer5-engine-workflows
 
-### 2026-05-29 · §Domain Model · §Architecture
+## 2026-05-31 — Layer 5 implementation session
 
-Layer 3 adopts casehub-qhorus for commitment lifecycle tracking. The central design decision was how to attach life-domain context to native qhorus Commitments without duplicating the foundation's obligation semantics. The chosen pattern is a `LifeCommitmentRecord` supplement (same approach as `LifeTaskContext` from Layer 2) — keyed by `correlationId` which links to the native qhorus `Commitment.correlationId`. `LifeCommitmentRecord.workItemId` is intentionally null for OVERSIGHT mode until a household-admin RESPONSE fulfills the gate and triggers WorkItem creation.
+### Key design decisions
 
-The commitment strategy is a sealed context hierarchy (`DelegationContext`, `ContractorContext`, `OversightContext`) dispatched via an internal SPI (`LifeCommitmentStrategy`). This SPI lives in `app/` not `api/` because the context types reference JPA entities — placing it in `api/` would create a circular Maven dependency. Three implementations registered as CDI `@ApplicationScoped` beans are collected via `Instance<LifeCommitmentStrategy>` in `LifeCommitmentService`, which asserts exactly one match per request (exclusivity invariant).
+1. **All 8 case definitions in one layer** (7 + care-episode child). AML did 1, clinical did 3 — life does 8 to demonstrate the full breadth of engine capabilities in one harness. Split into Phase 1 (infrastructure + 3 core) and Phase 2 (4 advanced) for reviewability.
 
-Channel topology is domain-scoped: `life/delegation` (shared, family delegation), `life/oversight` (shared, oversight gates — COMMAND+RESPONSE enforced via allowedTypes), and `life/actor/{externalActorId}` (per-actor, contractor commitments). These are intentionally different from the qhorus normative 3-channel mesh — life channels are household coordination channels, not agent orchestration channels. One APPROVAL_PENDING Watchdog per channel, registered at channel creation with `thresholdSeconds=0`, monitors for expired Commitments on that channel. `WatchdogAlertEvent.notificationChannel()` carries the channel name string; `LifeWatchdogAlertObserver` queries `LifeCommitmentRecord` by that channel name to find expired records.
+2. **YAML + fluent DSL pairing rule** — revised protocol PP-20260518 to establish both as equal authoring paths, not "runtime vs test." Every YAML gets a DSL companion. Worker functions use FuncWorkflowBuilder per new protocol PP-20260531.
 
-The oversight gate breaks the Layer 2 pattern: no WorkItem is created until household-admin RESPONSE arrives. `LifeOversightResponseObserver` (implements `MessageObserver`) bridges the RESPONSE to task creation — it runs with `@Transactional(REQUIRES_NEW)` because `MessageService.dispatch()` calls observers synchronously inside the qhorus dispatch transaction, and the observer needs its own transaction boundary. `LifeWatchdogAlertObserver` uses `@ObservesAsync` because qhorus fires `WatchdogAlertEvent` via `fireAsync()`.
+3. **Scope retrofit** — changed WorkItem scope from `"life"` to `casehubio/life/{domain}` (hierarchical). This enabled LifeDecisionLedgerObserver to resolve domain from scope Path instead of requiring LifeTaskContext — engine-created WorkItems now produce ledger entries without supplements.
 
-The `delegateTo` field in `LifeCommitmentRecord` is repurposed as a dedup key (title:templateRef hash) for OVERSIGHT mode — a semantic overload acknowledged as a known design trade-off, mitigated by a partial unique index on (delegate_to) WHERE mode = 'OVERSIGHT' AND status = 'PENDING_RESPONSE'. A dedicated `oversight_key` column would be cleaner but adds schema complexity for a single-mode concern.
+4. **SubCase M-of-N is DSL-only** — YAML schema doesn't support groupId/totalInGroup/requiredCount. Travel-plan's family-vote bindings added via Java augmentation. Filed for engine YAML schema expansion.
 
-Flyway: V103 creates `life_commitment_record` (default datasource, life domain); V104 seeds the `life-escalation` WorkItemTemplate for escalation tasks created by the Watchdog alert observer.
+5. **Cross-case signals live in workers, not observers** — LifeCaseTrackerObserver is pure infrastructure (status update). Domain cross-case logic (contractor-to-financial-review signal) goes in the completing worker itself. Matches clinical pattern.
+
+### Blockers
+
+- **engine#408** — engine SNAPSHOT has stale API signatures (CaseMetaModelRepository.findByKey 3-to-4 params, PlanItemSaveRequest 7-to-8 fields). Can't rebuild from source (compilation errors in engine itself). @QuarkusTest integration tests blocked. 67 pure unit/DSL tests pass.
+
+### Issues filed this session
+
+- engine#408 — engine compilation errors blocking SNAPSHOT rebuild
+- aml#45, aml#46 — fluent DSL companion + FuncDSL migration
+- clinical#50 — fluent DSL companions for 3 case definitions
+- devtown#60 — fluent DSL companions
+- parent#119 — fix case-definition-layers protocol path in PLATFORM.md

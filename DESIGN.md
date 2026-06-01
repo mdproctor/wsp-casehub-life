@@ -98,3 +98,43 @@ quarkus.datasource.qhorus.reactive=false
 |-------|------|
 | life#17 | `LifeWatchdogAlertObserver` escalation integration test — `@ObservesAsync` timing makes Awaitility unreliable |
 | life#18 | REST resource consistency — `@Produces/@Consumes` on all resources, 201 for commitment creation |
+
+---
+
+## Layer 5 — casehub-engine CasePlanModel Workflows (2026-06-01)
+
+**Spec:** `docs/specs/2026-05-31-layer5-casehub-engine-design.md` in project repo.
+
+### What was built
+
+- 8 `YamlCaseHub` subclasses + 8 fluent DSL companions in `io.casehub.life.app.engine`: appointment-cycle, home-maintenance, family-vote, travel-plan, contractor-coordination, care-coordination, care-episode, financial-review.
+- 8 YAML case definitions at `app/src/main/resources/life/`.
+- `LifeCaseService` — three-phase case start (PP-20260529-3ffe28): direct injection of each YamlCaseHub, switch on LifeCaseType.
+- `LifeCaseTracker` — JPA entity tracking active engine cases by type for cross-case signal lookup.
+- `LifeCaseTrackerObserver` — `@ObservesAsync CaseLifecycleEvent` updates tracker status.
+- `LifeCaseResource` — `POST /life-cases` endpoint.
+- `LifeCaseType` enum (api/): TRAVEL_PLAN, HOME_MAINTENANCE, CARE_COORDINATION, APPOINTMENT_CYCLE, CONTRACTOR_COORDINATION, FINANCIAL_REVIEW.
+- `LifeCaseStatus` enum (api/): ACTIVE, COMPLETED, FAILED.
+- Scope retrofit: WorkItem scope changed from `"life"` to `"casehubio/life/{domain}"` (hierarchical Path format).
+- `LifeDecisionLedgerObserver` refactored: domain resolution now uses WorkItem scope Path (primary), LifeTaskContext (fallback).
+- Flyway V107 (`life_case_tracker`).
+
+### Design decisions
+
+**All 8 case definitions in one layer.** AML did 1, clinical did 3. casehub-life does 8 to demonstrate the full breadth of engine capabilities in a single harness — parallel execution, adaptive gates, M-of-N SubCase quorum, cross-case signals, milestones, FuncDSL workers. Splitting across layers would have produced seven more issues and branch ceremonies for work sharing the same infrastructure.
+
+**YAML + DSL pairing rule (PP-20260518).** Every YAML definition has a fluent DSL companion. Both are equal authoring paths. The DSL is not "the test version" — it produces the same CaseDefinition and is used for augmentation when YAML doesn't support a feature.
+
+**SubCase M-of-N is DSL-only.** YAML schema doesn't support groupId/totalInGroup/requiredCount. Travel-plan's family-vote SubCase bindings are added via Java augmentation in `TravelPlanCaseHub.getDefinition()`.
+
+**Scope retrofit to hierarchical format.** `casehubio/life/{domain}` enables `LifeDecisionLedgerObserver` to resolve domain from scope Path instead of requiring a LifeTaskContext supplement. Engine-created WorkItems produce correct ledger entries without supplements.
+
+**Cross-case signals in workers, not observers.** `LifeCaseTrackerObserver` is pure infrastructure (status update). Domain cross-case logic (contractor-to-financial-review signal) goes in the completing worker itself. Matches clinical pattern.
+
+**FuncDSL for workers (PP-20260531).** `FuncWorkflowBuilder.workflow().tasks(FuncDSL.function(...)).build()` — not raw lambdas. Each worker is a `Function<Map<String, Object>, Map<String, Object>>`.
+
+### Blockers
+
+| Issue | What |
+|-------|------|
+| engine#410 | `SchedulerService.getCaseDefinition()` returns null after successful registration — forward ConcurrentHashMap lookup fails. Integration tests `@Disabled` until fixed. |
