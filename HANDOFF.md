@@ -1,23 +1,22 @@
-# Handoff — casehub-life Layer 5 closed, on main
-2026-06-01
+# Handoff — casehub-life ARC42STORIES.MD bootstrapped, on main
+2026-06-02
 
 ## Last Session
 
-Layer 5 (casehub-engine CasePlanModel workflows) closed. 8 case definitions,
-squash-merged to main+upstream. engine#410 filed for integration test blocker.
-CDI wiring fix for all 6 engine-persistence-memory alternatives. 199 tests pass.
-Issue #6 closed.
+ARC42STORIES.MD bootstrapped (1175 lines, §1–§13 + self-assessment). L5 LAYER-LOG
+stub completed first. Migrated L1–L5 layer entries with mode-per-section enforcement.
+CLAUDE.md references updated. Issue #21 closed. Branch merged to upstream.
 
 ## Immediate Next Step
 
-LAYER-LOG.md Layer 5 entry is still a stub (all placeholders). Write it
-before starting any new work — layer is not formally complete without it.
+`parent#114` — sync `docs/repos/casehub-life.md` for Layers 3–5 completion. File a
+GitHub issue on casehubio/parent describing the update needed (peer repo — do not
+commit directly).
 
 ## What's Left
 
-- LAYER-LOG.md Layer 5 entry — fill in architectural pattern, key protocols, design refs, key files · XS · Low
-- `parent#114` — sync `docs/repos/casehub-life.md` for Layers 3–5 completion · XS · Low
-- engine#410 — CaseDefinition forward lookup failure; integration tests `@Disabled` until fixed · blocks integration tests · Med
+- `parent#114` — sync `docs/repos/casehub-life.md` for Layers 3–5 · XS · Low
+- engine#410 — CaseDefinition forward lookup; integration tests `@Disabled` · blocks integration tests · Med
 
 ## What's Next
 
@@ -29,8 +28,6 @@ before starting any new work — layer is not formally complete without it.
 
 ## References
 
-- Spec: `docs/specs/2026-05-31-layer5-casehub-engine-design.md`
-- LAYER-LOG: Layer 5 entry (stub — needs completion)
-- Plan: `plans/attic/issue-6-layer5-engine-workflows/2026-05-31-layer5-casehub-engine.md`
-- Garden: GE-20260601-8ff52b (Surefire retry + assumeTrue gotcha)
-- Blog: `blog/2026-06-01-mdp01-layer5-eight-workflows.md`
+- ARC42STORIES: `ARC42STORIES.MD` (project root — 1175 lines)
+- Blog: `blog/2026-06-02-mdp01-arc42stories-bootstrap.md`
+- Plan: `~/.claude/plans/dreamy-juggling-spindle.md`
