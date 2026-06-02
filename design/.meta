@@ -1,0 +1,8 @@
+branch: issue-011-trust-routing
+project-sha: ac1b3b6fcc9695c2dbee256ef45148bfe189e675
+date: 2026-06-02
+issue: 11
+issue-repo: casehubio/life
+flyway-next-v: none
+design-repo: workspace
+design-section-hashes:
