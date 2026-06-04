@@ -2,6 +2,7 @@
 
 | File | Date | Title |
 |------|------|-------|
+| [2026-06-04-mdp01-tests-never-green.md](2026-06-04-mdp01-tests-never-green.md) | 2026-06-04 | The tests that were never green |
 | [2026-06-03-mdp01-layer6-trust-routing.md](2026-06-03-mdp01-layer6-trust-routing.md) | 2026-06-03 | Layer 6: Trust Routing — Where the Scores Come From |
 | [2026-06-02-mdp01-arc42stories-bootstrap.md](2026-06-02-mdp01-arc42stories-bootstrap.md) | 2026-06-02 | ARC42STORIES.MD: Five Layers into One Document |
 | [2026-06-01-mdp01-layer5-eight-workflows.md](2026-06-01-mdp01-layer5-eight-workflows.md) | 2026-06-01 | Layer 5: Eight Workflows and an Engine Bug |
