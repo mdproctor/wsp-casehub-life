@@ -1,0 +1,8 @@
+branch: issue-023-l5-integration-tests
+project-sha: 291e19771f4b96ed44e41e7063a395be9ec5fa0a
+date: 2026-06-04
+issue: 23
+issue-repo: casehubio/life
+flyway-next-v: none
+design-repo: workspace
+design-section-hashes:
