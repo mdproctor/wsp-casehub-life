@@ -1,33 +1,38 @@
-# Handoff — casehub-life ARC42STORIES.MD bootstrapped, on main
-2026-06-02
+# Handoff — casehub-life Layer 6 trust routing complete, on main
+2026-06-04
 
 ## Last Session
 
-ARC42STORIES.MD bootstrapped (1175 lines, §1–§13 + self-assessment). L5 LAYER-LOG
-stub completed first. Migrated L1–L5 layer entries with mode-per-section enforcement.
-CLAUDE.md references updated. Issue #21 closed. Branch merged to upstream.
+Layer 6 trust routing implemented and merged. Attestation pipeline
+(LifeOutcomeAttestationWriter), TrustRoutingPolicyProvider with 8 domain
+policies and 32-entry capability→domain mapping, ExternalActor REST
+enrichment with ledger-backed TrustProfile. 233 tests pass. Issue #11 closed.
 
 ## Immediate Next Step
 
-`parent#114` — sync `docs/repos/casehub-life.md` for Layers 3–5 completion. File a
-GitHub issue on casehubio/parent describing the update needed (peer repo — do not
-commit directly).
+`/work start 20` — Explore ActionRiskClassifier oversight gate (research/design,
+not implementation). Read `docs/specs/life-actor-model.md` for the actor model
+and `docs/specs/2026-06-03-layer6-trust-routing.md` for the trust routing context
+that #20 builds on.
 
 ## What's Left
 
-- `parent#114` — sync `docs/repos/casehub-life.md` for Layers 3–5 · XS · Low
-- engine#410 — CaseDefinition forward lookup; integration tests `@Disabled` · blocks integration tests · Med
+- `parent#114` — sync `docs/repos/casehub-life.md` for Layers 3–5 completion · XS · Low
+- `parent#148` — clarify trust-maturity-model protocol (thresholds in code vs YAML) · XS · Low
+- `parent#153` — add engine-ledger + platform-config to Cross-Repo Dependency Map · XS · Low
+- `life#22` — minor code review findings (test filters, FQ types, YAML duplication) · XS · Low
+- `engine#410` — CaseDefinition forward lookup; L5 integration tests @Disabled · blocks integration tests · Med
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #11 | Trust dimension score fields on ExternalActor | S | Med | Needs Layer 6 design |
-| #7 | Layer 6: Trust routing — Bayesian Beta scores | L | High | Next layer |
-| #20 | Explore ActionRiskClassifier oversight gate | M | High | Research / design |
+| #20 | Explore ActionRiskClassifier oversight gate | M | High | Research/design — builds on Layer 6 trust routing |
+| — | Layer 6 ARC42STORIES.MD §9.4 entry | S | Low | Write before closing Layer 6 fully |
+| — | Layer 7: OpenClaw as WorkerProvisioner | L | High | Next layer — makes trust routing decisions consequential |
 
 ## References
 
-- ARC42STORIES: `ARC42STORIES.MD` (project root — 1175 lines)
-- Blog: `blog/2026-06-02-mdp01-arc42stories-bootstrap.md`
-- Plan: `~/.claude/plans/dreamy-juggling-spindle.md`
+- Spec: `docs/specs/2026-06-03-layer6-trust-routing.md`
+- Blog: `blog/2026-06-03-mdp01-layer6-trust-routing.md`
+- Plan: `plans/attic/issue-011-trust-routing/2026-06-03-layer6-trust-routing.md`
