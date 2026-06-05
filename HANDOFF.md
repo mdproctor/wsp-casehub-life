@@ -1,6 +1,8 @@
 # Handoff — casehub-life #22/#24 closed, on main
 2026-06-05
 
+*Updated: parent#148, parent#153 closed — removed from backlog.*
+
 ## Last Session
 
 Closed #22 (Layer 6 code review fixes) and #24 (integration tests for 7 case definitions) on one branch. Fixed attestation test filter tautology (`verdict != null` → `trustDimension == null`), removed duplicate test YAML, added cold-start tests, extracted `CaseIntegrationTestSupport` shared utility, wrote 9 new integration test methods across 7 case definition classes. ARC42STORIES.MD synced — Layer 6 status updated to complete.
@@ -11,8 +13,6 @@ Closed #22 (Layer 6 code review fixes) and #24 (integration tests for 7 case def
 
 ## What's Left
 
-- `parent#148` — clarify trust-maturity-model protocol (thresholds in code vs YAML) · XS · Low
-- `parent#153` — add engine-ledger + platform-config to Cross-Repo Dependency Map · XS · Low
 - `life#25` — migrate CaseHub workers from Worker.builder to FuncWorkflowBuilder · M · Low
 - Pre-existing test failures — `LEDGER_SUBJECT_SEQUENCE` table missing in H2 (11 failures across 7 test classes) · S · Med
 
