@@ -1,29 +1,33 @@
-# Handoff — casehub-life #22/#24 closed, on main
-2026-06-05
-
-*Updated: parent#148, parent#153 closed — removed from backlog.*
+# Handoff — casehub-life #20 closed, Layer 7 partial
+2026-06-07
 
 ## Last Session
 
-Closed #22 (Layer 6 code review fixes) and #24 (integration tests for 7 case definitions) on one branch. Fixed attestation test filter tautology (`verdict != null` → `trustDimension == null`), removed duplicate test YAML, added cold-start tests, extracted `CaseIntegrationTestSupport` shared utility, wrote 9 new integration test methods across 7 case definition classes. ARC42STORIES.MD synced — Layer 6 status updated to complete.
+Implemented `LifeActionRiskClassifier` (life#20) — household agents now pause before consequential actions and route to the `life/oversight` channel. Fixed two engine#402 migration breaks mid-session: `WorkerResult.of()` for FuncDSL `function()` lambdas (7 case hub files), and `ListEvaluator.contains()` removal from `HumanTaskTarget.candidateGroups()` (10 test files, life#29). Branch closed: 9 commits on main, pushed to both fork and upstream.
 
 ## Immediate Next Step
 
-`/work start 20` — Explore ActionRiskClassifier oversight gate (research/design). Read `docs/specs/life-actor-model.md` and `docs/specs/2026-06-03-layer6-trust-routing.md`.
+Start life#27 — refactor `LifeActionRiskClassifier` to one-class-per-rule pattern (all domain properties of a household action type in one place). Design already clear from the brainstorm; implementation plan needed. Run `/work start 27`.
 
 ## What's Left
 
 - `life#25` — migrate CaseHub workers from Worker.builder to FuncWorkflowBuilder · M · Low
-- Pre-existing test failures — `LEDGER_SUBJECT_SEQUENCE` table missing in H2 (11 failures across 7 test classes) · S · Med
+- `life#26` — RBAC-differentiated risk thresholds (blocked on auth retrofit) · M · Med
+- `life#27` — one-class-per-rule refactor of LifeActionRiskClassifier · M · Low
+- engine#437 — clarify `GateRequired.scope` semantics (verify `"casehubio/life/oversight"` is correct)
+- Pre-existing: `LEDGER_SUBJECT_SEQUENCE` table missing in H2 — 8 test classes fail on every run
+- Backup branch `backup/pre-squash-main-20260607` — can delete after 14 days
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #20 | Explore ActionRiskClassifier oversight gate | M | High | Research/design — builds on Layer 6 trust routing |
-| — | Layer 7: OpenClaw as WorkerProvisioner | L | High | Next layer — makes trust routing decisions consequential |
+| #27 | One-class-per-rule refactor for LifeActionRiskClassifier | M | Low | Design clear; implement immediately |
+| #25 | Migrate workers from Worker.builder to FuncWorkflowBuilder | M | Low | Mechanical migration, no design needed |
+| — | Layer 7 (full): OpenClaw as WorkerProvisioner | XL | High | Research spec at parent/docs/specs/2026-05-25-openclaw-casehub-integration.md |
 
 ## References
 
-- Blog: `blog/2026-06-05-mdp01-filter-tested-nothing.md`
-- Specs: `docs/specs/2026-06-05-l6-code-review-fixes.md`, `docs/specs/2026-06-05-case-integration-tests.md`
+- Blog: `blog/2026-06-07-mdp01-fewer-approvers-stricter-gate.md`
+- Spec: `docs/specs/2026-06-07-action-risk-classifier-design.md`
+- Protocols: `docs/protocols/casehub-life/INDEX.md`
