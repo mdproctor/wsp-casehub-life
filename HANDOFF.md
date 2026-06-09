@@ -9,11 +9,11 @@ Implemented `LifeActionRiskClassifier` (life#20) — household agents now pause 
 
 ## Immediate Next Step
 
-Start life#25 — migrate CaseHub workers from `Worker.builder` to `FuncWorkflowBuilder` (mechanical migration, no design needed). Run `/work start 25`.
+No clear next feature — life#25 is now blocked. Options: investigate `LEDGER_SUBJECT_SEQUENCE` H2 gap (8 failing tests), or start engine#463 brainstorming on the engine side.
 
 ## What's Left
 
-- `life#25` — migrate CaseHub workers from Worker.builder to FuncWorkflowBuilder · M · Low
+- `life#25` — worker migration (blocked on engine#463 — function-as-worker design) · M · Med
 - `life#26` — RBAC-differentiated risk thresholds (blocked on auth retrofit) · M · Med
 - engine#437 — clarify `GateRequired.scope` semantics (verify `"casehubio/life/oversight"` is correct)
 - Pre-existing: `LEDGER_SUBJECT_SEQUENCE` table missing in H2 — 8 test classes fail on every run
@@ -23,7 +23,8 @@ Start life#25 — migrate CaseHub workers from `Worker.builder` to `FuncWorkflow
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #25 | Migrate workers from Worker.builder to FuncWorkflowBuilder | M | Low | Mechanical migration, no design needed |
+| #25 | Worker migration — scope TBD | M | Med | Blocked on engine#463 design |
+| — | Fix H2 `LEDGER_SUBJECT_SEQUENCE` gap | S | Low | 8 test classes affected; likely missing Flyway migration |
 | — | Layer 7 (full): OpenClaw as WorkerProvisioner | XL | High | Research spec at parent/docs/specs/2026-05-25-openclaw-casehub-integration.md |
 
 ## Cleaned up
