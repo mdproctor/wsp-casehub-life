@@ -1,13 +1,13 @@
 # Handoff — 2026-06-09
-life#32 closed, test suite restored, engine#463 filed
+Test suite fully green: life#32 + life#33 closed
 
 ## Last Session
 
-Restored 277/277 test suite (life#32): `LifeTestFixtures` was missing `tenancyId` on `WorkItemTemplate` — V35 adds `NOT NULL` with no H2 default; Hibernate `drop-and-create` never applies the Flyway default. Also added `import-qhorus.sql` via `sql-load-script` to seed `ledger_subject_sequence` (non-JPA table, would fail when ledger code paths activate). Earlier in the session: questioned life#25 (FuncWorkflowBuilder migration for stub workers), decided stubs are exempt pending engine#463, rescoped the issue. PP-20260531-worker-func-exec updated in CLAUDE.md.
+Two fixes landed. life#32: `LifeTestFixtures` missing `tenancyId` (V35 NOT NULL, no H2 default) + `ledger_subject_sequence` missing from H2 (now seeded via `import-qhorus.sql`). life#33: contractor actor channel name `life/actor/{uuid}` fails `ChannelSlugValidator` when UUID starts with a digit (62.5% of UUIDs) — prefixed with `ext-`. Both CLAUDE.md and protocols updated. 277/277, no flakes.
 
 ## Immediate Next Step
 
-`CommitmentLifecycleScenarioTest.contractorCommitment_dispatchesCommandAndCreatesRecord` is a pre-existing isolation failure (passes in full suite, fails alone). File as a new issue and fix, or investigate engine#463 brainstorming on the engine side.
+No immediate bugs. Discretionary: start engine#463 brainstorming (function-as-worker design, unblocks life#25), or tackle life#26 (RBAC risk thresholds, blocked on auth retrofit).
 
 ## What's Left
 
@@ -15,20 +15,18 @@ Restored 277/277 test suite (life#32): `LifeTestFixtures` was missing `tenancyId
 - `life#26` — RBAC-differentiated risk thresholds (blocked on auth retrofit) · M · Med
 - `engine#463` — design: first-class function-as-worker support (raw lambda vs FuncWorkflowBuilder gap) · M · High
 - `engine#437` — clarify `GateRequired.scope` semantics (verify `"casehubio/life/oversight"` is correct)
-- `CommitmentLifecycleScenarioTest` — isolation failure, passes in full suite, fails alone — unrelated to #32
 - Branch `issue-2-layer1-naive-domain` — eligible for deletion (14 days, marked 2026-06-09)
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| — | File and fix CommitmentLifecycleScenarioTest isolation bug | S | Low | Pre-existing; not blocking but messy |
 | engine#463 | Design function-as-worker abstraction | M | High | Needs brainstorming — unblocks life#25 |
 | #25 | Apply abstraction to first real OpenClaw workers | M | Med | Blocked on engine#463 |
 | — | Layer 7 (full): OpenClaw as WorkerProvisioner | XL | High | Research spec at parent/docs/specs/2026-05-25-openclaw-casehub-integration.md |
 
 ## References
 
-- Blog: `blog/2026-06-09-mdp02-wrong-cause-right-fix.md`
-- Protocol: `docs/protocols/casehub-life/non-jpa-tables-sql-load-script.md`
-- Garden: `GE-20260609-ef7dbe` (Flyway NOT NULL + DEFAULT not applied in H2 drop-and-create)
+- Blog: `blog/2026-06-09-mdp03-sixty-two-percent.md`
+- Garden: `GE-20260607-a4d78a` revised — UUID leading digit variant added
+- Protocol: `docs/protocols/casehub-life/actor-channel-name-prefix.md` (PP-20260609-982617)
