@@ -1,0 +1,9 @@
+branch: issue-32-ledger-subject-sequence-h2
+project-sha: 2759d9f28d32d98a803437b1e8d7068e9afa1dd0
+date: 2026-06-09
+issue: 32
+issue-repo: casehubio/life
+covers: 32
+flyway-next-v: none
+design-repo: workspace
+design-section-hashes: 
