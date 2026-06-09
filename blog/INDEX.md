@@ -2,6 +2,7 @@
 
 | File | Date | Title |
 |------|------|-------|
+| [2026-06-09-mdp01-the-audit-that-became-the-plan.md](2026-06-09-mdp01-the-audit-that-became-the-plan.md) | 2026-06-09 | The audit that became the plan |
 | [2026-06-07-mdp01-fewer-approvers-stricter-gate.md](2026-06-07-mdp01-fewer-approvers-stricter-gate.md) | 2026-06-07 | Fewer Approvers, Stricter Gate |
 | [2026-06-05-mdp01-filter-tested-nothing.md](2026-06-05-mdp01-filter-tested-nothing.md) | 2026-06-05 | The Filter That Tested Nothing |
 | [2026-06-04-mdp01-tests-never-green.md](2026-06-04-mdp01-tests-never-green.md) | 2026-06-04 | The tests that were never green |
