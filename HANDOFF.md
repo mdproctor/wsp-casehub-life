@@ -13,7 +13,8 @@ No clear next feature — life#25 is now blocked. Options: investigate `LEDGER_S
 
 ## What's Left
 
-- `life#25` — worker migration (blocked on engine#463 — function-as-worker design) · M · Med
+- `life#25` — apply function-as-worker abstraction to first real OpenClaw workers (blocked on engine#463) · M · Med
+- `engine#463` — design: first-class function-as-worker support (raw lambda vs FuncWorkflowBuilder gap) — filed this session, needs brainstorming
 - `life#26` — RBAC-differentiated risk thresholds (blocked on auth retrofit) · M · Med
 - engine#437 — clarify `GateRequired.scope` semantics (verify `"casehubio/life/oversight"` is correct)
 - Pre-existing: `LEDGER_SUBJECT_SEQUENCE` table missing in H2 — 8 test classes fail on every run
@@ -23,7 +24,8 @@ No clear next feature — life#25 is now blocked. Options: investigate `LEDGER_S
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #25 | Worker migration — scope TBD | M | Med | Blocked on engine#463 design |
+| engine#463 | Design function-as-worker abstraction | M | High | Needs brainstorming — raw lambda vs FuncWorkflowBuilder gap |
+| #25 | Apply abstraction to first real OpenClaw workers | M | Med | Blocked on engine#463 |
 | — | Fix H2 `LEDGER_SUBJECT_SEQUENCE` gap | S | Low | 8 test classes affected; likely missing Flyway migration |
 | — | Layer 7 (full): OpenClaw as WorkerProvisioner | XL | High | Research spec at parent/docs/specs/2026-05-25-openclaw-casehub-integration.md |
 
