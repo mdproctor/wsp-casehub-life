@@ -1,0 +1,9 @@
+branch: issue-33-actor-channel-slug
+project-sha: 67524ce84c0859fa5f504afa4d8010256c785d5b
+date: 2026-06-09
+issue: 33
+issue-repo: casehubio/life
+covers: 33
+flyway-next-v: none
+design-repo: workspace
+design-section-hashes: 
