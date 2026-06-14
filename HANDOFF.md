@@ -1,6 +1,8 @@
 # Handoff — 2026-06-14
 OpenClaw Testcontainers pattern proven — test infrastructure ready for Layer 7
 
+*Updated: engine#437 closed — removed from backlog.*
+
 ## Last Session
 
 Research session: explored OpenClaw worker architecture and proved the Docker/Testcontainers testing pattern. Mini project at `/tmp/openclaw-isolation-test/` passes 3/3 tests in 8s. Key findings: correct endpoint is `POST /v1/chat/completions` with `model: "openclaw"` (not `/api/sessions/main/messages` which returns 404); `execInContainer` required for HTTP calls (Podman custom-network host port mapping broken); `contextWindow: 200000` needed for mock model. 7 forage entries submitted. ARC42STORIES trust-routing stale blocker cleared.
@@ -14,7 +16,6 @@ Start engine#463 in the engine session — the function-as-worker abstraction de
 - `life#25` — apply function-as-worker abstraction to first real OpenClaw workers (blocked on engine#463) · M · Med
 - `life#26` — RBAC-differentiated risk thresholds (blocked on auth retrofit) · M · Med
 - `engine#463` — design: first-class function-as-worker support (raw lambda vs FuncWorkflowBuilder gap) · M · High
-- `engine#437` — clarify `GateRequired.scope` semantics (verify `"casehubio/life/oversight"` is correct)
 - Branch `issue-2-layer1-naive-domain` — past deletion date (marked 2026-06-09, now 5 days over) — awaiting explicit YES before deleting
 - Branch `issue-16-17-18-cleanup` — past deletion date (marked 2026-06-12, now 2 days over) — awaiting explicit YES before deleting
 
