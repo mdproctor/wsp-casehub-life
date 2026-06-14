@@ -2,6 +2,7 @@
 
 | File | Date | Title |
 |------|------|-------|
+| [2026-06-14-mdp01-eight-seconds.md](2026-06-14-mdp01-eight-seconds.md) | 2026-06-14 | Eight Seconds |
 | [2026-06-09-mdp03-sixty-two-percent.md](2026-06-09-mdp03-sixty-two-percent.md) | 2026-06-09 | Sixty-two percent |
 | [2026-06-09-mdp02-wrong-cause-right-fix.md](2026-06-09-mdp02-wrong-cause-right-fix.md) | 2026-06-09 | Wrong cause, right fix |
 | [2026-06-09-mdp01-the-audit-that-became-the-plan.md](2026-06-09-mdp01-the-audit-that-became-the-plan.md) | 2026-06-09 | The audit that became the plan |
