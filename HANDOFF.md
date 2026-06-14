@@ -1,13 +1,13 @@
-# Handoff — 2026-06-09
-Test suite fully green: life#32 + life#33 closed
+# Handoff — 2026-06-14
+OpenClaw Testcontainers pattern proven — test infrastructure ready for Layer 7
 
 ## Last Session
 
-Two fixes landed. life#32: `LifeTestFixtures` missing `tenancyId` (V35 NOT NULL, no H2 default) + `ledger_subject_sequence` missing from H2 (now seeded via `import-qhorus.sql`). life#33: contractor actor channel name `life/actor/{uuid}` fails `ChannelSlugValidator` when UUID starts with a digit (62.5% of UUIDs) — prefixed with `ext-`. Both CLAUDE.md and protocols updated. 277/277, no flakes.
+Research session: explored OpenClaw worker architecture and proved the Docker/Testcontainers testing pattern. Mini project at `/tmp/openclaw-isolation-test/` passes 3/3 tests in 8s. Key findings: correct endpoint is `POST /v1/chat/completions` with `model: "openclaw"` (not `/api/sessions/main/messages` which returns 404); `execInContainer` required for HTTP calls (Podman custom-network host port mapping broken); `contextWindow: 200000` needed for mock model. 7 forage entries submitted. ARC42STORIES trust-routing stale blocker cleared.
 
 ## Immediate Next Step
 
-No immediate bugs. Discretionary: start engine#463 brainstorming (function-as-worker design, unblocks life#25), or tackle life#26 (RBAC risk thresholds, blocked on auth retrofit).
+Start engine#463 in the engine session — the function-as-worker abstraction design. This unblocks the OpenClaw WorkerProvisioner work (casehub-openclaw) and then life#25.
 
 ## What's Left
 
@@ -15,18 +15,20 @@ No immediate bugs. Discretionary: start engine#463 brainstorming (function-as-wo
 - `life#26` — RBAC-differentiated risk thresholds (blocked on auth retrofit) · M · Med
 - `engine#463` — design: first-class function-as-worker support (raw lambda vs FuncWorkflowBuilder gap) · M · High
 - `engine#437` — clarify `GateRequired.scope` semantics (verify `"casehubio/life/oversight"` is correct)
-- Branch `issue-2-layer1-naive-domain` — eligible for deletion (14 days, marked 2026-06-09)
+- Branch `issue-2-layer1-naive-domain` — past deletion date (marked 2026-06-09, now 5 days over) — awaiting explicit YES before deleting
+- Branch `issue-16-17-18-cleanup` — past deletion date (marked 2026-06-12, now 2 days over) — awaiting explicit YES before deleting
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| engine#463 | Design function-as-worker abstraction | M | High | Needs brainstorming — unblocks life#25 |
-| #25 | Apply abstraction to first real OpenClaw workers | M | Med | Blocked on engine#463 |
+| engine#463 | Design function-as-worker abstraction | M | High | Critical path — unblocks everything below |
+| — | casehub-openclaw WorkerProvisioner impl | L | High | Blocked on engine#463; lives in casehub-openclaw repo |
+| #25 | Wire OpenClaw workers into casehub-life | M | Med | Blocked on engine#463 + casehub-openclaw |
 | — | Layer 7 (full): OpenClaw as WorkerProvisioner | XL | High | Research spec at parent/docs/specs/2026-05-25-openclaw-casehub-integration.md |
 
 ## References
 
-- Blog: `blog/2026-06-09-mdp03-sixty-two-percent.md`
-- Garden: `GE-20260607-a4d78a` revised — UUID leading digit variant added
-- Protocol: `docs/protocols/casehub-life/actor-channel-name-prefix.md` (PP-20260609-982617)
+- Blog: `blog/2026-06-14-mdp01-eight-seconds.md`
+- Mini project: `/tmp/openclaw-isolation-test/` (Testcontainers proof — passes 3/3)
+- Garden: 6 new entries + revise GE-20260520-c0e5b4 (SSH tunnel alternative)
