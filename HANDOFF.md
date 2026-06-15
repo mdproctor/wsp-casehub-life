@@ -14,7 +14,7 @@ Start engine#463 in the engine session — the function-as-worker abstraction de
 ## What's Left
 
 - `life#25` — apply function-as-worker abstraction to first real OpenClaw workers (blocked on engine#463) · M · Med
-- `life#26` — RBAC-differentiated risk thresholds (blocked on auth retrofit) · M · Med
+- `life#26` — RBAC-differentiated risk thresholds (blocked on parent#251 — auth retrofit epic) · M · Med
 - `engine#463` — design: first-class function-as-worker support (raw lambda vs FuncWorkflowBuilder gap) · M · High
 - Branch `issue-2-layer1-naive-domain` — past deletion date (marked 2026-06-09, now 5 days over) — awaiting explicit YES before deleting
 - Branch `issue-16-17-18-cleanup` — past deletion date (marked 2026-06-12, now 2 days over) — awaiting explicit YES before deleting
