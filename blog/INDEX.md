@@ -2,6 +2,7 @@
 
 | File | Date | Title |
 |------|------|-------|
+| [2026-06-16-mdp01-snapshot-silent-alternatives.md](2026-06-16-mdp01-snapshot-silent-alternatives.md) | 2026-06-16 | What selected-alternatives doesn't tell you |
 | [2026-06-14-mdp01-eight-seconds.md](2026-06-14-mdp01-eight-seconds.md) | 2026-06-14 | Eight Seconds |
 | [2026-06-09-mdp03-sixty-two-percent.md](2026-06-09-mdp03-sixty-two-percent.md) | 2026-06-09 | Sixty-two percent |
 | [2026-06-09-mdp02-wrong-cause-right-fix.md](2026-06-09-mdp02-wrong-cause-right-fix.md) | 2026-06-09 | Wrong cause, right fix |
