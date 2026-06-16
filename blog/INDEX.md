@@ -2,6 +2,7 @@
 
 | File | Date | Title |
 |------|------|-------|
+| [2026-06-16-mdp02-closing-layer-6.md](2026-06-16-mdp02-closing-layer-6.md) | 2026-06-16 | Closing Layer 6 — or: the bugs you find when you actually look |
 | [2026-06-16-mdp01-snapshot-silent-alternatives.md](2026-06-16-mdp01-snapshot-silent-alternatives.md) | 2026-06-16 | What selected-alternatives doesn't tell you |
 | [2026-06-14-mdp01-eight-seconds.md](2026-06-14-mdp01-eight-seconds.md) | 2026-06-14 | Eight Seconds |
 | [2026-06-09-mdp03-sixty-two-percent.md](2026-06-09-mdp03-sixty-two-percent.md) | 2026-06-09 | Sixty-two percent |
