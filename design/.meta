@@ -1,0 +1,9 @@
+branch: issue-25-openclaw-worker-provisioner
+project-sha: fcba6f2c1740596f221e9fb8e24973e129b4dd1a
+date: 2026-06-17
+issue: 25
+issue-repo: casehubio/life
+covers: 25
+flyway-next-v: none
+design-repo: workspace
+design-section-hashes: 
