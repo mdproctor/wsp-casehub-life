@@ -1,62 +1,77 @@
-# Design: OpenClaw Agent Workers — First Real Workers (life#25)
+# Design: OpenClaw LLM Backend Integration — AgentExec Pattern Validation (life#25)
 
-**Date:** 2026-06-17  
-**Issue:** casehubio/life#25  
-**Branch:** `issue-25-openclaw-worker-provisioner`  
-**Status:** Approved
-
----
-
-## 1. Context and Scope
-
-### What this is
-
-Replace the first stub `WorkerFunction.Sync(hardcoded-lambda)` with `WorkerFunction.AgentExec(Agent)`
-where the Agent calls OpenClaw's OpenAI-compatible API (`POST /v1/chat/completions`,
-`model="openclaw"`). This is the settled abstraction from casehubio/engine#463.
-
-### What this is NOT
-
-- Not `WorkerProvisioner` / heartbeat mode (that is Full Layer 7 — see §7)
-- Not removal of all stub workers (remaining 7 case types stay as stubs)
-- Not migration to the descriptor+handler pattern (separate refactor)
-- Not enabling `casehub.qhorus.reactive.enabled=true` (not needed for this pattern)
-
-### Why AgentExec, not WorkerProvisioner
-
-The engine's `CaseContextChangedEventHandler` uses `ReactiveWorkerProvisioner` (not blocking
-`WorkerProvisioner`) for binding-based flows. Enabling reactive provisioner requires the full
-qhorus reactive stack (`casehub.qhorus.reactive.enabled=true`) and a properly wired COMMAND
-dispatch path — both are out of scope here. The `WorkerFunction.AgentExec(Agent)` pattern uses
-the existing inline-worker path unchanged: Worker in CaseDefinition → `AgentRoutingStrategy.select()`
-→ `WorkerScheduleEvent` → `DefaultWorkerExecutor.executeSync(agent::execute, ...)` on a virtual
-thread → `WorkflowExecutionCompletedHandler` applies output to context → binding fires.
-
-OpenClaw exposes an OpenAI-compatible API (`/v1/chat/completions`, `model="openclaw"`). The
-`Agent.execute()` call dispatches synchronously to OpenClaw via LangChain4J's `OpenAiChatModel`
-and blocks on a virtual thread until the response arrives. This is the direct-call mode.
+**Date:** 2026-06-17
+**Issue:** casehubio/life#25
+**Branch:** `issue-25-openclaw-worker-provisioner`
+**Status:** Approved (rev 2)
 
 ---
 
-## 2. Architecture Overview
+## 1. What This Is and Is Not
+
+### What it delivers
+
+`WorkerFunction.AgentExec(Agent)` wired end-to-end in casehub-life: one stub worker replaced
+with a real LLM call through OpenClaw's OpenAI-compatible API (`POST /v1/chat/completions`,
+`model="openclaw"`). Proves the AgentExec execution path from `Agent.execute()` through
+`DefaultWorkerExecutor` → `WorkflowExecutionCompletedHandler` → case context update → binding
+fires. Establishes `Worker.agentDescriptor()` for the trust system.
+
+### What it explicitly is NOT
+
+**This does not start Layer 7.** ARC42STORIES §9.4 defines Layer 7 as:
+> "casehub-openclaw as the WorkerProvisioner. OpenClaw instances execute household skills:
+> banking API aggregation, Google Calendar integration, Home Assistant smart home control,
+> WhatsApp/SMS follow-up."
+
+Workers using `/v1/chat/completions` have no tool access, no skill routing, no ChannelContextWindow.
+They will hallucinate appointment IDs and booking confirmations. That is not a real worker in any
+meaningful sense — it is an LLM inference call with domain-shaped JSON output. Layer 7
+(casehubio/life#8) begins when workers actually call appointment systems, calendars, and home
+automation devices. The path to that is via `POST /hooks/agent` (real direct-call mode) or
+`WorkerProvisioner` heartbeat mode — both requiring separate design work tracked in life#38
+and life#37 respectively.
+
+### Why AgentExec, not WorkerProvisioner or /hooks/agent
+
+`WorkerFunction.AgentExec(Agent)` is the engine#463 settled abstraction for LLM agent workers.
+`Agent.execute()` is synchronous — it calls `model.chat(ChatRequest)` and blocks on a virtual
+thread. This is compatible with the inline worker execution path in `DefaultWorkerExecutor`.
+
+`POST /hooks/agent` (real OpenClaw direct-call) delivers results asynchronously via
+`deliver:webhook`. Bridging that to the synchronous `Agent.execute()` API requires a pending
+future registry, a new delivery endpoint, and new casehub-openclaw infrastructure — filed as
+life#38.
+
+`WorkerProvisioner` heartbeat mode requires `ReactiveWorkerProvisioner` wiring and the reactive
+qhorus stack — filed as life#37.
+
+---
+
+## 2. Architecture
 
 ```
 AppointmentCycleCaseHub
-  └── augment(yaml) → adds Worker("book-appointment-agent", AgentExec(bookingAgent))
+  └── augment(yaml) → adds Worker("book-appointment-agent",
+                                   AgentExec(bookingAgent),
+                                   AgentDescriptor(agentId="life:openclaw:health-agent", ...))
                            stub lambdas for all other workers (unchanged)
 
 bookingAgent = Agent.builder()
-    .model(openClawProvider)       ← OpenClawChatModelProvider (new @ApplicationScoped bean)
+    .model(lifeOpenClawChatModelProvider)  ← LifeOpenClawChatModelProvider
     .systemPrompt(...)
     .userMessage(...)
     .responseSchema(BookingResult.class)
-    .build()
+    .build()   ← chatModelProvider.get() called ONCE here; ChatModel stored in Agent for JVM lifetime
 
-At runtime:
-  binding fires → AgentRoutingStrategy selects "book-appointment-agent"
-  → WorkerScheduleEvent → DefaultWorkerExecutor.executeSync(agent::execute, inputData, ...)
-  → OpenClawChatModelProvider.get() → OpenAiChatModel(baseUrl=openclaw, model="openclaw")
-  → POST /v1/chat/completions → OpenClaw runs → JSON response
+At runtime (first getDefinition() call):
+  augment() runs (double-checked lock), bookingAgent is built, OpenAiChatModel is created
+
+At case execution:
+  binding fires → AgentRoutingStrategy selects "book-appointment-agent" (via AgentDescriptor)
+  → WorkerScheduleEvent → DefaultWorkerExecutor.executeSync(agent::execute, ...) on virtual thread
+  → LifeOpenClawChatModelProvider-backed OpenAiChatModel.chat(ChatRequest)
+  → POST /v1/chat/completions → OpenClaw LLM → structured JSON response
   → Agent parses response via responseSchema → WorkerResult
   → WorkflowExecutionCompletedHandler applies output → .booking != null → next binding fires
 ```
@@ -65,19 +80,26 @@ At runtime:
 
 ## 3. New Components
 
-### 3.1 `OpenClawChatModelProvider`
+### 3.1 `LifeOpenClawChatModelProvider`
 
-**Package:** `io.casehub.life.app.engine.agent`  
-**Type:** `@ApplicationScoped` CDI bean  
+**Package:** `io.casehub.life.app.engine.agent`
+**Type:** `@ApplicationScoped` CDI bean
 **Implements:** `io.casehub.api.model.ai.ChatModelProvider`
 
-Reads three Quarkus config properties and builds `OpenAiChatModel` via reflection, mirroring
-the pattern in `OpenAiChatModelProvider` from `casehub-engine-api`. The `baseUrl` parameter
-points at OpenClaw's endpoint instead of OpenAI's.
+Temporary placement pending casehubio/engine#527 (add optional `baseUrl` to
+`OpenAiChatModelProvider` in engine-api). Once that lands, this class is deleted and callers
+use `OpenAiChatModelProvider.builder().baseUrl(...).modelName("openclaw").build()` directly.
+
+Uses reflection to set `baseUrl` on `OpenAiChatModel.builder()`, mirroring the pattern in
+`OpenAiChatModelProvider`. `get()` is called once during `Agent.build()` — config changes
+(`api-url`, `timeout-seconds`) require a restart.
 
 ```java
 @ApplicationScoped
-public class OpenClawChatModelProvider implements ChatModelProvider {
+public class LifeOpenClawChatModelProvider implements ChatModelProvider {
+
+    // Pending casehubio/engine#527 — move baseUrl support to OpenAiChatModelProvider in engine-api.
+    // Delete this class and replace callers with OpenAiChatModelProvider.builder().baseUrl(...) once landed.
 
     @ConfigProperty(name = "casehub.life.openclaw.api-url")
     String apiUrl;
@@ -97,14 +119,14 @@ public class OpenClawChatModelProvider implements ChatModelProvider {
             Class<?> clazz = Class.forName("dev.langchain4j.model.openai.OpenAiChatModel");
             Object builder = clazz.getMethod("builder").invoke(null);
             Class<?> bc = builder.getClass();
-            invoke(bc, builder, "baseUrl", String.class, apiUrl);
-            invoke(bc, builder, "apiKey", String.class, apiKey);
-            invoke(bc, builder, "modelName", String.class, "openclaw");
-            invoke(bc, builder, "timeout", Duration.class, Duration.ofSeconds(timeoutSeconds));
+            invoke(bc, builder, "baseUrl",   String.class, apiUrl);
+            invoke(bc, builder, "apiKey",    String.class, apiKey);
+            invoke(bc, builder, "modelName", String.class, "openclaw");  // GE-20260614-328420
+            invoke(bc, builder, "timeout",   Duration.class, Duration.ofSeconds(timeoutSeconds));
             return (ChatModel) bc.getMethod("build").invoke(builder);
         } catch (InvocationTargetException e) {
-            Throwable cause = e.getCause() != null ? e.getCause() : e;
-            throw new AgentException("Failed to build OpenClawChatModel: " + cause.getMessage(), cause);
+            throw new AgentException("Failed to build OpenClawChatModel: "
+                + (e.getCause() != null ? e.getCause() : e).getMessage(), e);
         } catch (Exception e) {
             throw new AgentException("Failed to build OpenClawChatModel: " + e.getMessage(), e);
         }
@@ -119,18 +141,16 @@ public class OpenClawChatModelProvider implements ChatModelProvider {
 
 **Config (`application.properties`):**
 ```properties
-# OpenClaw AI backend — direct-call mode
+# casehubio/life#25 — OpenClaw LLM backend (direct /v1/chat/completions, not /hooks/agent)
+# Runtime dependency: OpenClaw must be accessible at this URL; failure deferred to first agent.execute()
 casehub.life.openclaw.api-url=http://localhost:3000/v1
 casehub.life.openclaw.api-key=no-key-required
 casehub.life.openclaw.timeout-seconds=120
 ```
 
-**GE-20260614-328420:** `model="openclaw"` is required — the upstream provider model ID is
-rejected by OpenClaw's `/v1/chat/completions` endpoint.
-
 ### 3.2 `BookingResult`
 
-**Package:** `io.casehub.life.app.engine.agent`  
+**Package:** `io.casehub.life.app.engine.agent`
 **Type:** Java record (no framework deps)
 
 ```java
@@ -143,51 +163,115 @@ public record BookingResult(
 ) {}
 ```
 
-`AgentBuilder.responseSchema(BookingResult.class)` derives the JSON schema automatically.
-`Agent.execute()` enforces structured output — OpenClaw returns conforming JSON.
+`AgentBuilder.responseSchema(BookingResult.class)` derives the JSON schema. Structured output
+enforcement means OpenClaw must return conforming JSON.
 
 ### 3.3 `AppointmentCycleCaseHub` — modified
 
-Inject `OpenClawChatModelProvider`. Replace the `bookAppointmentWorker()` lambda with an
-`Agent`-backed worker. All other workers remain as stub lambdas.
+Inject `LifeOpenClawChatModelProvider`. Replace `bookAppointmentWorker()` with an
+`AgentExec`-backed worker carrying an `AgentDescriptor`. All other workers remain stub lambdas.
+
+`AgentDescriptor` is required: without it, `AgentCandidateFactory` builds a candidate with null
+identity, `AgentRoutingStrategy` has nothing to score against trust dimensions, and the
+attestation pipeline (Layer 6) cannot attribute outcomes from this worker.
 
 ```java
 @ApplicationScoped
 public class AppointmentCycleCaseHub extends YamlCaseHub {
 
-    @Inject OpenClawChatModelProvider openClaw;   // new injection
+    @Inject LifeOpenClawChatModelProvider openClaw;
 
-    // getDefinition() lazy-init unchanged
+    @Inject
+    @ConfigProperty(name = "quarkus.uuid", defaultValue = "278776f9-e1b0-46fb-9032-8bddebdcf9ce")
+    String tenancyId;
+
+    // Note: AppointmentCycleCaseDefinitions (DSL companion) defines capabilities, bindings,
+    // goals — pure structure, no workers. It does not need updating; workers are runtime
+    // behaviour augmented here in CaseHub.augment(), not in the DSL companion.
+
+    // getDefinition() double-checked lazy init unchanged.
+    // augment() runs exactly once on first getDefinition() call.
+    // bookingAgent is built once: chatModelProvider.get() is called in Agent.build(), not per invocation.
 
     private Worker bookAppointmentWorker() {
+        Agent bookingAgent = Agent.builder()
+            .model(openClaw)
+            .systemPrompt("""
+                You are a healthcare appointment booking agent for a UK household.
+                Book medical appointments with the requested provider.
+                If the provider is unavailable, set declined=true and provide a reason.
+                Respond with valid JSON only — no prose, no explanation.
+                """)
+            .userMessage("Book a {{appointmentType}} appointment with provider {{provider}}.")
+            .responseSchema(BookingResult.class)
+            .build();
+
+        AgentDescriptor descriptor = new AgentDescriptor(
+            "life:openclaw:health-agent",         // agentId
+            "OpenClaw Health Agent",              // name
+            "1.0",                                // version
+            "openclaw",                           // provider
+            "openclaw",                           // modelFamily
+            "openclaw",                           // modelVersion (same — no sub-version known)
+            null,                                 // weightsFingerprint
+            null,                                 // domainVocabulary
+            null,                                 // slotVocabulary
+            null,                                 // dispositionVocabulary
+            null,                                 // axisVocabularies
+            "casehubio/life/health",              // slot — matches scope path convention
+            List.of(),                            // capabilities (populated when skill manifest available)
+            null,                                 // disposition
+            "GB",                                 // jurisdiction
+            null,                                 // dataHandlingPolicy
+            tenancyId,                            // tenancyId (required)
+            "Booking agent for health domain"     // briefing
+        );
+
         return Worker.builder()
             .name("book-appointment-agent")
             .capabilities(List.of(cap("book-appointment")))
-            .function(Agent.builder()
-                .model(openClaw)
-                .systemPrompt("""
-                    You are a healthcare appointment booking agent for a UK household.
-                    Your task: book medical appointments with the requested provider.
-                    If the provider is unavailable, set declined=true and provide a reason.
-                    Always respond with valid JSON only — no prose, no explanation.
-                    """)
-                .userMessage(
-                    "Book a {{appointmentType}} appointment with provider {{provider}}.")
-                .responseSchema(BookingResult.class)
-                .build())
+            .function(bookingAgent)
+            .agentDescriptor(descriptor)
             .build();
     }
 
     // findAlternativeWorker, confirmAppointmentWorker, preVisitPrepWorker,
-    // recordHealthDecisionWorker — all unchanged stub lambdas
+    // recordHealthDecisionWorker — unchanged stub lambdas
 }
 ```
 
-### 3.4 Maven dependency addition
+### 3.4 Startup health probe
 
-In `app/pom.xml`, add `langchain4j-open-ai` at `runtime` scope. The base `langchain4j`
-API (containing `ChatModel`) is already on the classpath transitively via `casehub-engine-api`
-(compile scope). The `OpenAiChatModel` implementation is loaded reflectively at runtime.
+```java
+@ApplicationScoped
+public class OpenClawHealthProbe {
+
+    @ConfigProperty(name = "casehub.life.openclaw.api-url")
+    String apiUrl;
+
+    void onStart(@Observes StartupEvent event) {
+        try {
+            HttpURLConnection conn = (HttpURLConnection)
+                new URL(apiUrl.replace("/v1", "/health")).openConnection();
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(3000);
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) {
+                Log.warnf("OpenClaw health probe returned %d — agent workers will fail on first invocation", code);
+            }
+        } catch (Exception e) {
+            Log.warnf("OpenClaw not reachable at %s — agent workers will fail on first invocation: %s",
+                apiUrl, e.getMessage());
+        }
+    }
+}
+```
+
+### 3.5 Maven dependency addition
+
+In `app/pom.xml`, add `langchain4j-open-ai` at `runtime` scope. Base `langchain4j` API
+(`ChatModel`) is already available transitively via `casehub-engine-api` (compile scope).
+`OpenAiChatModel` is loaded via reflection at runtime.
 
 ```xml
 <dependency>
@@ -197,17 +281,14 @@ API (containing `ChatModel`) is already on the classpath transitively via `caseh
 </dependency>
 ```
 
-No version needed — managed by `casehub-life-parent` BOM (which inherits from `casehub-parent`
-which manages LangChain4J versions).
-
 ---
 
 ## 4. CDI Wiring
 
-No changes to `quarkus.arc.exclude-types` or `quarkus.arc.selected-alternatives`. The
-`OpenClawChatModelProvider` is a new `@ApplicationScoped` bean with no conflicts. No engine
-no-op beans are affected because we are adding an inline worker (the AgentExec path), not
-replacing a `WorkerProvisioner` no-op.
+No changes to `quarkus.arc.exclude-types` or `quarkus.arc.selected-alternatives`. We are adding
+an inline `WorkerFunction.AgentExec` worker — not replacing a `WorkerProvisioner` no-op, not
+adding casehub-openclaw-casehub as a dependency. The `LifeOpenClawChatModelProvider` is a
+new `@ApplicationScoped` bean with no engine no-op conflicts.
 
 ---
 
@@ -215,15 +296,14 @@ replacing a `WorkerProvisioner` no-op.
 
 ### 5.1 Unit test — `LifeOpenClawAgentTest`
 
-Pure JUnit 5, no Quarkus. Tests `Agent.execute()` in isolation via a `ChatModelProvider` stub.
+Pure JUnit 5, no Quarkus. Constructs `Agent` via a `ChatModelProvider` stub backed by a mock
+`ChatModel`. Verifies `Agent.execute()` → correct `WorkerResult` output.
+
+`ChatModel` mock: `model.chat(ChatRequest)` returns `ChatResponse` → `aiMessage().text()` →
+JSON string (as verified from `Agent.execute()` source).
 
 ```java
 class LifeOpenClawAgentTest {
-
-    ChatModel mockModel;
-    ChatModelProvider stubProvider;
-
-    // Agent.execute() calls model.chat(ChatRequest) → ChatResponse → aiMessage().text()
 
     private ChatResponse stubResponse(String json) {
         AiMessage msg = mock(AiMessage.class);
@@ -233,24 +313,23 @@ class LifeOpenClawAgentTest {
         return resp;
     }
 
-    @BeforeEach
-    void setup() {
-        mockModel = mock(ChatModel.class);
-        stubProvider = new ChatModelProvider() {
-            public ModelType type() { return ModelType.OPENAI; }
-            public ChatModel get() { return mockModel; }
-        };
-    }
-
     @Test
-    void execute_confirmedBooking_returnsWorkerResult() {
+    void execute_booking_returnsPendingAppointment() {
+        // "confirmed=false" is correct here: the booking step returns a PENDING booking.
+        // confirmed=true is set by the later confirm-appointment binding — not this worker.
+        ChatModel mockModel = mock(ChatModel.class);
         when(mockModel.chat(any(ChatRequest.class))).thenReturn(stubResponse(
             "{\"appointmentId\":\"APT-123\",\"provider\":\"Dr Smith\","
             + "\"confirmed\":false,\"declined\":null,\"reason\":null}"));
 
+        ChatModelProvider stub = new ChatModelProvider() {
+            public ModelType type() { return ModelType.OPENAI; }
+            public ChatModel get() { return mockModel; }
+        };
+
         Agent agent = Agent.builder()
-            .model(stubProvider)
-            .systemPrompt("You are a booking agent...")
+            .model(stub)
+            .systemPrompt("You are a booking agent.")
             .userMessage("Book a {{appointmentType}} with {{provider}}.")
             .responseSchema(BookingResult.class)
             .build();
@@ -258,17 +337,13 @@ class LifeOpenClawAgentTest {
         WorkerResult result = agent.execute(
             Map.of("appointmentType", "GP checkup", "provider", "Dr Smith"));
 
-        assertThat(result.output()).containsKey("appointmentId");
+        assertThat(result.output().get("appointmentId")).isEqualTo("APT-123");
         assertThat(result.output().get("confirmed")).isEqualTo(false);
     }
 
     @Test
     void execute_unavailableProvider_returnsDeclined() {
-        when(mockModel.chat(any(ChatRequest.class))).thenReturn(stubResponse(
-            "{\"appointmentId\":null,\"provider\":\"Dr Gone\","
-            + "\"confirmed\":false,\"declined\":true,\"reason\":\"Not accepting patients\"}"));
-
-        // ... agent.execute() ...
+        // ...mock returns declined=true...
         assertThat(result.output().get("declined")).isEqualTo(true);
     }
 }
@@ -276,19 +351,26 @@ class LifeOpenClawAgentTest {
 
 ### 5.2 Integration test — `AppointmentCycleIntegrationTest`
 
-`@QuarkusTest` with `@InjectMock OpenClawChatModelProvider`. The mock provider returns a stub
-`ChatModel` that returns a fixed JSON response. The full case flow is exercised unchanged:
-start case → `book-appointment-agent` executes via `Agent.execute(mock)` → `WorkerResult` applied
-→ `confirm-appointment` binding fires (`.booking != null`) → confirms humanTask creation.
+`@QuarkusTest` with `@InjectMock LifeOpenClawChatModelProvider`.
 
-`@InjectMock` replaces the `@ApplicationScoped` `OpenClawChatModelProvider` bean for the test.
-Stub lambdas for all other workers remain — no changes to `CaseIntegrationTestSupport`.
+**Critical timing:** `@InjectMock` must be configured before first `getDefinition()` access
+because `chatModelProvider.get()` is called exactly once in `Agent.build()` during `augment()`.
+The double-checked lock in `getDefinition()` ensures `augment()` only runs once per JVM lifecycle.
+Since `@QuarkusTest` bean reset occurs before the test method, `@InjectMock` is established
+before any case start triggers `getDefinition()` — timing is safe, but this dependency is
+non-obvious and should not be changed (e.g. by moving augmentation to `@PostConstruct`).
+
+`@InjectMock` stubs `openClaw.get()` to return a `ChatModel` that returns a fixed
+`BookingResult` JSON. The full case flow is exercised: case starts → `book-appointment-agent`
+executes via `Agent.execute(mock)` → `WorkerResult` applied to context → `.booking != null`
+is true → `confirm-appointment` binding fires → humanTask created.
+
+All other workers remain stub lambdas — `CaseIntegrationTestSupport` is unchanged.
 
 ### 5.3 Test config
 
 `test/resources/application.properties`:
 ```properties
-# Placeholder — overridden by @InjectMock in integration tests
 casehub.life.openclaw.api-url=http://localhost:9999/v1
 casehub.life.openclaw.api-key=test-key
 casehub.life.openclaw.timeout-seconds=5
@@ -300,54 +382,66 @@ casehub.life.openclaw.timeout-seconds=5
 
 ### New: `docs/protocols/casehub-life/openclaw-agent-worker-pattern.md`
 
-Establishes the `WorkerFunction.AgentExec(Agent)` pattern for life domain workers:
-- Use `Agent.builder().model(openClawProvider)...build()` for workers that delegate to OpenClaw
-- `OpenClawChatModelProvider` is the single shared CDI provider for all life OpenClaw workers
-- `responseSchema(Record.class)` is required — typed structured output prevents hallucinated field names
-- Timeout configured via `casehub.life.openclaw.timeout-seconds` (default 120s)
-- System prompt must instruct agent to return JSON only — no prose
-- Worker name convention: `{capability-name}-agent` (matches existing stub names)
+```
+id: PP-20260617-XXXXXX
+title: WorkerFunction.AgentExec(Agent) pattern for LLM-backed life workers
+```
+
+Rules:
+- Use `Worker.builder().function(Agent.builder().model(provider)...build())` for LLM-backed workers
+- `Worker.agentDescriptor(AgentDescriptor)` is REQUIRED on every LLM-backed worker —
+  without it, trust routing has no identity to score and the attestation pipeline cannot
+  attribute outcomes
+- `responseSchema(Record.class)` is required — typed structured output prevents hallucinated
+  field names and parsing failures
+- **Runtime dependency:** OpenClaw must be deployed and accessible at `casehub.life.openclaw.api-url`
+  at runtime. Startup succeeds regardless — failure is deferred silently to first
+  `agent.execute()` invocation. A `@Observes StartupEvent` health probe is required on every
+  service that registers LLM-backed workers
+- Config changes to `casehub.life.openclaw.api-url` or `casehub.life.openclaw.timeout-seconds`
+  require a restart — `chatModelProvider.get()` is called exactly once in `Agent.build()`,
+  which runs during `augment()` on first `getDefinition()` access (double-checked lock)
+- `model="openclaw"` is hardcoded in `LifeOpenClawChatModelProvider` — do not use an upstream
+  provider model ID (GE-20260614-328420)
+- `LifeOpenClawChatModelProvider` is temporary — replace with
+  `OpenAiChatModelProvider.builder().baseUrl(...).modelName("openclaw").build()` once
+  casehubio/engine#527 lands
 
 ### Update: `docs/protocols/casehub-life/PP-20260531-worker-func-exec.md`
 
-Reflect the engine#463 settled design:
-
 | Worker type | Use | When |
 |---|---|---|
-| Stub / in-process utility | `Worker.builder().function(lambda)` → `WorkerFunction.Sync` | Temporary stubs, CDI service calls that return immediately |
-| OpenClaw / LLM agent | `Worker.builder().function(Agent.builder()...build())` → `WorkerFunction.AgentExec` | Real agents, LLM-backed workers, OpenClaw direct-call |
-| Multi-step durable | `FuncWorkflowBuilder` or YAML workflow → `WorkerFunction.Flow` | Sequential steps with retry, branching, or error recovery per step |
+| Stub / in-process | `Worker.builder().function(lambda)` → `WorkerFunction.Sync` | Temporary stubs and pure CDI service calls |
+| LLM-backed (OpenClaw, any LLM API) | `Worker.builder().function(Agent.builder()...build())` → `WorkerFunction.AgentExec` | Real agent calls — requires `agentDescriptor` |
+| Multi-step durable | `FuncWorkflowBuilder` or YAML workflow → `WorkerFunction.Flow` | Sequential steps with retry/branching |
 
 ---
 
-## 7. Out of Scope — Follow-on Issues to File
+## 7. Follow-On Issues
 
-**Before leaving brainstorm**, file:
+Filed before leaving brainstorming:
 
-1. **Full Layer 7 — `WorkerProvisioner` heartbeat mode**: wire `casehub-openclaw-casehub`,
-   implement `LifeReactiveWorkerProvisioner implements ReactiveWorkerProvisioner` (wraps blocking
-   `OpenClawWorkerProvisioner`), `OpenClawChannelBackend` wiring, COMMAND dispatch path from
-   `WorkerScheduleEventHandler.dispatchCommand()` to OpenClaw. Requires decision on whether to
-   enable `casehub.qhorus.reactive.enabled=true` (and implications for qhorus datasource).
-
-2. **Migrate remaining 7 case type stub workers** to `WorkerFunction.AgentExec` once the
-   OpenClaw integration is validated end-to-end with the first real worker.
-
-3. **Descriptor+handler pattern migration**: move worker lambdas/agents from `*CaseHub.augment()`
-   into `*CaseDescriptor` POJOs per the PLATFORM.md protocol (FuncDSL companions superseded).
+| Issue | Title | Purpose |
+|---|---|---|
+| casehubio/engine#527 | Add optional `baseUrl` to `OpenAiChatModelProvider` | Removes `LifeOpenClawChatModelProvider` from life; makes engine-api the general-purpose OpenAI-compatible provider |
+| casehubio/life#37 | Layer 7 (full): wire `OpenClawWorkerProvisioner` — heartbeat mode | Full Layer 7 path 1 |
+| casehubio/life#38 | Layer 7: `/hooks/agent` direct-call integration | Full Layer 7 path 2 — real skills, calendar, Home Assistant |
 
 ---
 
 ## 8. Platform Coherence Check
 
 - **Right repo:** life application layer owns domain agent configuration (system prompts,
-  response schemas, domain-specific model routing). Foundation remains domain-agnostic.
-- **Right abstraction:** `WorkerFunction.AgentExec(Agent)` is the settled engine#463 abstraction
-  for LLM/agent workers. `ChatModelProvider` SPI in `casehub-engine-api` is the established
-  interface. No new platform abstractions needed.
-- **Consolidation:** `OpenClawChatModelProvider` is life-specific (OpenClaw base URL config).
-  If other harnesses adopt OpenClaw, a shared `OpenClawChatModelProvider` could move to
-  `casehub-openclaw-casehub` — not premature to place it in life now.
-- **Pattern consistency:** mirrors how `OpenAiChatModelProvider` works in `casehub-engine-api`
-  (reflection-based builder, no compile-time dependency on the concrete model class).
-- **GE-20260614-328420 applied:** `model="openclaw"` hard-coded in provider.
+  response schemas, AgentDescriptor identity). Foundation remains domain-agnostic.
+- **Right abstraction:** `WorkerFunction.AgentExec(Agent)` is the engine#463 settled abstraction
+  for LLM workers. `ChatModelProvider` SPI in `casehub-engine-api` is the established interface.
+- **Module placement:** `LifeOpenClawChatModelProvider` is temporarily in life pending
+  casehubio/engine#527. It does NOT belong in `casehub-openclaw-casehub` (would pull in
+  CDI-conflicting `WorkerProvisioner`/`WorkerStatusListener`/`CaseChannelProvider` beans) and
+  NOT as a permanent life class (generic OpenAI-compatible URL redirect is an engine-api concern).
+- **GE-20260614-328420 applied:** `model="openclaw"` hardcoded.
+- **Issue 4 build-time behaviour documented:** `get()` called once at `Agent.build()` time.
+- **`AgentDescriptor` present:** attestation pipeline and trust routing have agent identity.
+- **`AppointmentCycleCaseDefinitions` unaffected:** DSL companion defines static structure
+  (capabilities, bindings, goals); workers are runtime behaviour in `augment()`, not in the
+  DSL companion. No changes needed there.
