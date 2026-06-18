@@ -3,7 +3,7 @@
 **Date:** 2026-06-17
 **Issue:** casehubio/life#25
 **Branch:** `issue-25-openclaw-worker-provisioner`
-**Status:** Approved (rev 3)
+**Status:** Approved (rev 4)
 
 ---
 
@@ -69,8 +69,9 @@ At runtime (first getDefinition() call):
   augment() runs (double-checked lock), bookingAgent is built, OpenAiChatModel is created
 
 At case execution:
-  binding fires → AgentRoutingStrategy selects "book-appointment-agent"
-                  (AgentDescriptor carries identity for trust scoring — not used for selection)
+  binding fires → AgentRoutingStrategy selects worker for "book-appointment" capability
+                  (by capability name match; "book-appointment-agent" is incidental;
+                   AgentDescriptor carries identity for trust scoring — not involved in selection)
   → WorkerScheduleEvent → DefaultWorkerExecutor.executeSync(agent::execute, ...) on virtual thread
   → LifeOpenClawChatModelProvider-backed OpenAiChatModel.chat(ChatRequest)
   → POST /v1/chat/completions → OpenClaw LLM → structured JSON response
@@ -159,9 +160,11 @@ casehub.life.openclaw.api-url=http://localhost:3000/v1
 casehub.life.openclaw.api-key=no-key-required
 casehub.life.openclaw.timeout-seconds=120
 
-# Required — no default. Fail fast on startup if not configured.
-# For this single-tenant household harness, this is the household tenancy UUID.
-casehub.life.tenancy-id=
+# casehub.life.tenancy-id is required with NO default and must NOT appear in this file with
+# an empty value. Quarkus injects "" for a present-but-empty key — AgentDescriptorValidator
+# would then throw on the first getDefinition() call, not at startup.
+# Omitting the key entirely forces a ConfigException at Quarkus startup — true fail-fast.
+# Set this in the deployment environment (env var, Kubernetes secret, etc.).
 ```
 
 ### 3.2 `BookingResult`
@@ -241,7 +244,7 @@ public class AppointmentCycleCaseHub extends YamlCaseHub {
             "1",                                  // version
             "openclaw",                           // provider
             "openclaw",                           // modelFamily
-            "openclaw",                           // modelVersion
+            null,                                 // modelVersion — unknown; null is honest
             null,                                 // weightsFingerprint
             null,                                 // domainVocabulary
             null,                                 // slotVocabulary
@@ -276,7 +279,12 @@ OpenClaw has no documented `/health` endpoint. Known endpoints: `POST /hooks/age
 server is reachable without hitting an undocumented path. Failure is logged as a warning —
 startup proceeds regardless (this is a housekeeping signal, not a fatal condition).
 
+`@IfBuildProfile("prod")` suppresses the probe during tests (which run under the default or
+`test` profile). Without this gate, every test run logs a spurious TCP-connect warning to
+`localhost:9999` — noise with no diagnostic value.
+
 ```java
+@IfBuildProfile("prod")   // io.quarkus.arc.profile.IfBuildProfile
 @ApplicationScoped
 public class OpenClawHealthProbe {
 
@@ -380,8 +388,28 @@ class LifeOpenClawAgentTest {
 
     @Test
     void execute_unavailableProvider_returnsDeclined() {
-        // ...mock returns declined=true...
+        ChatModel mockModel = mock(ChatModel.class);
+        when(mockModel.chat(any(ChatRequest.class))).thenReturn(stubResponse(
+            "{\"appointmentId\":null,\"provider\":\"Dr Gone\","
+            + "\"confirmed\":false,\"declined\":true,\"reason\":\"Not accepting new patients\"}"));
+
+        ChatModelProvider stub = new ChatModelProvider() {
+            public ModelType type() { return ModelType.OPENAI; }
+            public ChatModel get() { return mockModel; }
+        };
+
+        Agent agent = Agent.builder()
+            .model(stub)
+            .systemPrompt("You are a booking agent.")
+            .userMessage("Book a {{appointmentType}} with {{provider}}.")
+            .responseSchema(BookingResult.class)
+            .build();
+
+        WorkerResult result = agent.execute(
+            Map.of("appointmentType", "GP checkup", "provider", "Dr Gone"));
+
         assertThat(result.output().get("declined")).isEqualTo(true);
+        assertThat(result.output().get("reason")).isEqualTo("Not accepting new patients");
     }
 }
 ```
@@ -390,13 +418,28 @@ class LifeOpenClawAgentTest {
 
 `@QuarkusTest` with `@InjectMock LifeOpenClawChatModelProvider`.
 
-**Critical timing:** `@InjectMock` must be configured before first `getDefinition()` access
-because `chatModelProvider.get()` is called exactly once in `Agent.build()` during `augment()`.
-The double-checked lock in `getDefinition()` ensures `augment()` runs only once per JVM lifecycle.
-Since `@QuarkusTest` bean reset occurs before the test method, `@InjectMock` is established
-before any case start triggers `getDefinition()` — timing is safe, but the dependency is
-non-obvious and must not be changed (e.g. by moving augmentation to `@PostConstruct`, which
-would fire before `@InjectMock` is established).
+**Critical timing — single-class constraint:**
+
+`augmentedDefinition` is a class-level `volatile` field on the `@ApplicationScoped`
+`AppointmentCycleCaseHub` singleton. `augment()` runs exactly once per JVM lifetime (double-checked
+lock). The first test class that starts an appointment cycle case triggers `augment()`, which calls
+`Agent.build()`, which calls `chatModelProvider.get()` — baking the first class's mock `ChatModel`
+permanently into the `Agent` stored in `augmentedDefinition`.
+
+**Quarkus mock reset at test-class boundaries restores the CDI delegate of
+`LifeOpenClawChatModelProvider`, but this has no effect on the already-built `Agent`.**
+The `Agent` holds the first class's `ChatModel` directly (not via the provider), so no
+subsequent `@InjectMock` can change what `agent.execute()` uses.
+
+Consequence: `AppointmentCycleIntegrationTest` must be the only test class in the Quarkus test
+run that starts appointment cycle cases. A second class that stubs different booking agent
+behaviour will silently use the first class's mock response. If this constraint becomes a
+problem, the caching strategy in `augment()` must be revisited — options include making it
+retriggerable or removing the cache and accepting repeated augmentation cost.
+
+`@InjectMock` is established before any case start triggers `getDefinition()` — safe, but
+moving augmentation to `@PostConstruct` would break this because `@PostConstruct` fires
+before `@InjectMock` is established.
 
 `@InjectMock` stubs `openClaw.get()` to return a `ChatModel` that returns a fixed
 `BookingResult` JSON. The full case flow is exercised: case starts → `book-appointment-agent`
@@ -408,6 +451,8 @@ Test config (`test/resources/application.properties`):
 casehub.life.openclaw.api-url=http://localhost:9999/v1
 casehub.life.openclaw.api-key=test-key
 casehub.life.openclaw.timeout-seconds=5
+# Required property — must appear in test config so Quarkus doesn't throw ConfigException at startup.
+# OpenClawHealthProbe is suppressed via @IfBuildProfile("prod"), so no TCP connect is attempted.
 casehub.life.tenancy-id=278776f9-e1b0-46fb-9032-8bddebdcf9ce
 ```
 
@@ -419,8 +464,10 @@ casehub.life.tenancy-id=278776f9-e1b0-46fb-9032-8bddebdcf9ce
 
 Rules:
 - Use `Worker.builder().function(Agent.builder().model(provider)...build())` for LLM-backed workers
-- **`Worker.agentDescriptor(AgentDescriptor)` is REQUIRED** — without it, trust routing has no
-  identity to score and the attestation pipeline cannot attribute outcomes
+- **`Worker.agentDescriptor(AgentDescriptor)` is architecturally required (not build-time enforced)**
+  — `Worker.Builder.build()` does not validate the field; omitting it compiles cleanly and
+  silently produces a worker with null descriptor. Trust routing has no identity to score and
+  the attestation pipeline cannot attribute outcomes. Treat as required by convention.
 - **Agent identity format:** `{model-family}:{persona}@{major}` per `docs/specs/life-actor-model.md`
   (e.g. `"openclaw:health-agent@1"`, `"claude:health-agent@3"`). This value must match the
   config map key used in `casehub-openclaw-casehub` when `WorkerProvisioner` is wired
