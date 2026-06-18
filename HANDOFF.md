@@ -1,36 +1,40 @@
-# Handoff — 2026-06-16
-Layer 6 epic (#7) closed — validation found two test bugs; ARC42 §9.4 written; #36 filed for engine regression.
-
-*Updated: engine#463 closed — removed from backlog.*
+# Handoff — 2026-06-18
+life#25 closed — first real LLM-backed worker (AgentExec + OpenClaw /v1/chat/completions). AgentDescriptor convention established. CDI test pattern fixed (engine#536 filed). Two new engine issues filed (engine#536, engine#537).
 
 ## Last Session
 
-Closed Layer 6 (trust routing) properly. Pre-closure validation found two bugs: (1) `JpaActorTrustScoreRepository` missing from `selected-alternatives` — `NoOpActorTrustScoreRepository` was silently discarding all trust score writes, making `ExternalActorTrustEnrichmentTest` a permanent false-pass; (2) `ledger_subject_sequence` missing `tenancy_id` column in `import-qhorus.sql` after ledger SNAPSHOT update — HTTP 500 on all ledger-writing integration tests. Both fixed, committed, CLAUDE.md updated. `LifeCaseResourceTest` has a pre-existing `NoSuchMethodError` on `CaseHubRuntime.signal()` (engine SNAPSHOT API change) — filed as #36. ARC42STORIES.MD §9.4 entry written for Layer 6. Issue #7 closed.
+Implemented `WorkerFunction.AgentExec(Agent)` for `book-appointment-agent` in `AppointmentCycleCaseHub`. The key discovery: `AgentExec` and `WorkerProvisioner` are completely different engine execution paths — cannot be substituted. Life#25 uses OpenClaw as an LLM server (`/v1/chat/completions`), not the WorkerProvisioner heartbeat path. Full Layer 7 (real skills: calendar, Home Assistant, banking APIs) requires separate work via `life#37` (WorkerProvisioner) or `life#38` (`/hooks/agent` bridge).
+
+Major CDI testing fix: `@InjectMock` on `@ApplicationScoped` beans causes Quarkus CDI restart → `BlackboardEventCodecRegistrar` double-registers Vert.x codecs → all subsequent `@QuarkusTest` classes fail. Fix: `@Alternative @Priority(10)` CDI test bean registered in `selected-alternatives`. This also unmasked `CaseContextChangedEventHandler` running JPA on IO thread (engine#537).
+
+Build verification: unit tests pass (3/3). Integration tests fail due to pre-existing `CaseContextChangedEventHandler` IO thread violation (engine#537). `ShowcaseScenarioTest` fails with pre-existing optimistic lock race (unrelated).
 
 ## Immediate Next Step
 
-`engine#463` is now closed — function-as-worker abstraction is designed. Start Layer 7: either fix `life#36` first (S/Low — engine API test regression), or read `engine#463` design and begin OpenClaw WorkerProvisioner implementation path.
+Fix `CaseContextChangedEventHandler` IO thread violation in engine (engine#537) — once that lands the AppointmentCycle integration tests should go green. OR start life#37 (WorkerProvisioner wiring) / life#38 (/hooks/agent bridge) for real Layer 7. Either is unblocked.
 
 ## What's Left
 
-- `life#25` — apply function-as-worker abstraction to first real OpenClaw workers (blocked on casehub-openclaw WorkerProvisioner impl) · M · Med
-- `life#26` — RBAC-differentiated risk thresholds (blocked on `parent#251` — auth retrofit) · M · Med
-- `life#36` — fix `LifeCaseResourceTest` NoSuchMethodError — `CaseHubRuntime.signal()` engine SNAPSHOT API change · S · Low
-- 8 branches with closed issues but no `chore: branch closed` stamp — awaiting explicit YES per branch before deletion (see epic hygiene note in session)
-- Branch `issue-2-layer1-naive-domain` — 3+ weeks past, explicit YES still required
-- Branch `issue-16-17-18-cleanup` — 3+ weeks past, explicit YES still required
+- life#37 — Layer 7 (full): wire `OpenClawWorkerProvisioner` — heartbeat mode · L · High
+- life#38 — Layer 7: `/hooks/agent` direct-call integration — real skills · L · High
+- life#26 — RBAC-differentiated risk thresholds (blocked on `parent#251` — auth retrofit) · M · Med
+- life#36 — fix `LifeCaseResourceTest` NoSuchMethodError — `CaseHubRuntime.signal()` engine SNAPSHOT · S · Low
+- engine#536 — `BlackboardEventCodecRegistrar` idempotency (blocks all @QuarkusTest) · S · Low
+- engine#537 — `CaseContextChangedEventHandler` @Blocking annotation (blocks AppointmentCycle integration tests) · S · Low
+- casehubio/engine#527 — add `baseUrl` to `OpenAiChatModelProvider` (deletes `LifeOpenClawChatModelProvider`) · S · Low
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| — | casehub-openclaw WorkerProvisioner impl | L | High | Blocked on casehub-openclaw repo work |
-| #25 | Wire OpenClaw workers into casehub-life | M | Med | Blocked on casehub-openclaw |
-| — | Layer 7 (full): OpenClaw as WorkerProvisioner | XL | High | Research spec at parent/docs/specs/2026-05-25-openclaw-casehub-integration.md |
+| engine#536 | BlackboardEventCodecRegistrar idempotency | S | Low | Unblocks all @QuarkusTest |
+| engine#537 | CaseContextChangedEventHandler @Blocking | S | Low | Unblocks AppointmentCycle tests |
+| #38 | /hooks/agent direct-call bridge for Layer 7 | L | High | Real OpenClaw skills |
+| #37 | WorkerProvisioner heartbeat mode | L | High | Full Layer 7 |
 
 ## References
 
-- Blog: `blog/2026-06-16-mdp02-closing-layer-6.md`
-- ARC42 Layer 6 §9.4: `ARC42STORIES.MD` — "Layer — Trust routing" (completed 2026-06-16)
-- Garden: GE-20260616-036128, GE-20260616-17187e, GE-20260616-90a867, GE-20260616-101fc0
-- Issue filed: `casehubio/life#36` (LifeCaseResourceTest engine API regression)
+- Blog: `blog/2026-06-18-mdp01-first-real-worker.md`
+- Design spec: `docs/specs/2026-06-17-openclaw-agent-worker-design.md` (rev 5)
+- Protocol: `docs/protocols/casehub-life/openclaw-agent-worker-pattern.md`
+- Garden: GE-20260618-248ce7, GE-20260618-c552c3, GE-20260618-a7a383, GE-20260618-5008f5, GE-20260618-8526c8, GE-20260618-fe7c8e
