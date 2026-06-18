@@ -3,7 +3,7 @@
 **Date:** 2026-06-17
 **Issue:** casehubio/life#25
 **Branch:** `issue-25-openclaw-worker-provisioner`
-**Status:** Approved (rev 4)
+**Status:** Approved (rev 5)
 
 ---
 
@@ -280,7 +280,9 @@ server is reachable without hitting an undocumented path. Failure is logged as a
 startup proceeds regardless (this is a housekeeping signal, not a fatal condition).
 
 `@IfBuildProfile("prod")` suppresses the probe during tests (which run under the default or
-`test` profile). Without this gate, every test run logs a spurious TCP-connect warning to
+`test` profile) and during `quarkus:dev` (which runs under the `dev` profile). In dev mode a
+developer won't see a reachability signal at startup; the first agent execution surfaces it.
+That is acceptable. Without this gate, test runs log a spurious TCP-connect warning to
 `localhost:9999` — noise with no diagnostic value.
 
 ```java
@@ -414,37 +416,98 @@ class LifeOpenClawAgentTest {
 }
 ```
 
-### 5.2 Integration test — `AppointmentCycleIntegrationTest`
+### 5.2 Integration test migration — `AppointmentCycleIntegrationTest` and `AppointmentCycleCaseHubTest`
 
-`@QuarkusTest` with `@InjectMock LifeOpenClawChatModelProvider`.
+Both `AppointmentCycleIntegrationTest` (3 case-execution tests) and `AppointmentCycleCaseHubTest`
+(structural definition tests) are existing `@QuarkusTest` classes that will break after this
+spec's change unless migrated.
 
-**Critical timing — single-class constraint:**
+**Why both classes need migration:**
 
-`augmentedDefinition` is a class-level `volatile` field on the `@ApplicationScoped`
-`AppointmentCycleCaseHub` singleton. `augment()` runs exactly once per JVM lifetime (double-checked
-lock). The first test class that starts an appointment cycle case triggers `augment()`, which calls
-`Agent.build()`, which calls `chatModelProvider.get()` — baking the first class's mock `ChatModel`
-permanently into the `Agent` stored in `augmentedDefinition`.
+All `@QuarkusTest` classes share the same Quarkus instance by default. `augmentedDefinition` is
+a `volatile` field on the `@ApplicationScoped` `AppointmentCycleCaseHub` singleton — it is baked
+exactly once per JVM lifetime (double-checked lock in `getDefinition()`). `AppointmentCycleCaseHubTest`
+calls `caseHub.getDefinition()` in `hasFiveWorkers()` and other tests — this triggers `augment()`
+and calls `openClaw.get()`. Alphabetical ordering means `AppointmentCycleCaseHubTest` runs first.
+Without `@InjectMock`, the REAL `LifeOpenClawChatModelProvider.get()` builds a real `OpenAiChatModel`
+with `baseUrl=localhost:9999` and bakes it permanently. When `AppointmentCycleIntegrationTest` then
+sets up `@InjectMock`, `get()` is never called again — `agent.execute()` uses the real model,
+connects to `localhost:9999/v1/chat/completions`, gets connection refused, and all three tests fail.
 
-**Quarkus mock reset at test-class boundaries restores the CDI delegate of
-`LifeOpenClawChatModelProvider`, but this has no effect on the already-built `Agent`.**
-The `Agent` holds the first class's `ChatModel` directly (not via the provider), so no
-subsequent `@InjectMock` can change what `agent.execute()` uses.
+**Fix: add the same `@InjectMock` and request-aware `@BeforeEach` to BOTH classes.**
 
-Consequence: `AppointmentCycleIntegrationTest` must be the only test class in the Quarkus test
-run that starts appointment cycle cases. A second class that stubs different booking agent
-behaviour will silently use the first class's mock response. If this constraint becomes a
-problem, the caching strategy in `augment()` must be revisited — options include making it
-retriggerable or removing the cache and accepting repeated augmentation cost.
+Whichever class runs first has its `@BeforeEach` execute before the first `getDefinition()` call,
+stubs `openClaw.get()` with a request-aware `ChatModel`, and bakes it. The other class's
+`@BeforeEach` then stubs `get()` again — but `get()` is never called again. The baked
+request-aware `ChatModel` serves all test methods across both classes.
 
-`@InjectMock` is established before any case start triggers `getDefinition()` — safe, but
-moving augmentation to `@PostConstruct` would break this because `@PostConstruct` fires
-before `@InjectMock` is established.
+**Request-aware mock is required** because `declinePath_findsAlternativeAndContinues()` passes
+`"provider": "unavailable"`. The user message template is
+`"Book a {{appointmentType}} appointment with provider {{provider}}."` which renders to
+`"Book a GP appointment with provider unavailable."`. The mock must detect this string in the
+rendered user message and return the decline response. A single-response stub would break
+the decline-path test.
 
-`@InjectMock` stubs `openClaw.get()` to return a `ChatModel` that returns a fixed
-`BookingResult` JSON. The full case flow is exercised: case starts → `book-appointment-agent`
-executes via `Agent.execute(mock)` → `WorkerResult` applied to context → `.booking != null`
-is true → `confirm-appointment` binding fires → humanTask created.
+**Shared mock setup** (identical `@InjectMock` + `@BeforeEach` in both classes):
+
+```java
+@InjectMock
+LifeOpenClawChatModelProvider openClaw;
+
+@BeforeEach
+void setupOpenClaw() {
+    // openClaw.get() is called AT MOST ONCE across all test classes —
+    // during the first getDefinition() call that triggers augment().
+    // The ChatModel returned here is baked permanently for the JVM lifetime.
+    // Must be request-aware: declinePath sends "provider=unavailable",
+    // golden-path and sequential tests send real provider names.
+    ChatModel requestAware = mock(ChatModel.class);
+    when(requestAware.chat(any(ChatRequest.class))).thenAnswer(invocation -> {
+        ChatRequest req = invocation.getArgument(0);
+        String userText = req.messages().stream()
+            .filter(m -> m instanceof UserMessage)
+            .map(m -> ((UserMessage) m).singleText())
+            .findFirst().orElse("");
+        if (userText.toLowerCase().contains("unavailable")) {
+            return stubChatResponse(
+                "{\"appointmentId\":null,\"provider\":\"Dr Gone\","
+                + "\"confirmed\":false,\"declined\":true,\"reason\":\"Provider unavailable\"}");
+        }
+        return stubChatResponse(
+            "{\"appointmentId\":\"APT-" + System.currentTimeMillis()
+            + "\",\"provider\":\"Dr Smith\",\"confirmed\":false,"
+            + "\"declined\":null,\"reason\":null}");
+    });
+    when(openClaw.get()).thenReturn(requestAware);
+    when(openClaw.type()).thenReturn(ModelType.OPENAI);
+}
+
+// helper — place in each class or extract to CaseIntegrationTestSupport
+private static ChatResponse stubChatResponse(String json) {
+    AiMessage msg = mock(AiMessage.class);
+    when(msg.text()).thenReturn(json);
+    ChatResponse resp = mock(ChatResponse.class);
+    when(resp.aiMessage()).thenReturn(msg);
+    return resp;
+}
+```
+
+`AppointmentCycleCaseHubTest` structural tests are otherwise unchanged — no test bodies need
+updating. `AppointmentCycleIntegrationTest` test bodies are unchanged — all three tests pass
+with the baked request-aware `ChatModel`.
+
+**Optional new test in `AppointmentCycleCaseHubTest`** (validates the descriptor is wired):
+
+```java
+@Test
+void bookAppointmentWorkerHasAgentDescriptor() {
+    var worker = caseHub.getDefinition().getWorkers().stream()
+        .filter(w -> "book-appointment-agent".equals(w.getName()))
+        .findFirst().orElseThrow();
+    assertNotNull(worker.agentDescriptor(), "AgentDescriptor must be set — not build-time enforced");
+    assertEquals("openclaw:health-agent@1", worker.agentDescriptor().agentId());
+}
+```
 
 Test config (`test/resources/application.properties`):
 ```properties
