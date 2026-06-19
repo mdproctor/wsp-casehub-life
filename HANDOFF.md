@@ -1,36 +1,34 @@
-# Handoff — 2026-06-18
-life#25 closed — first real LLM-backed worker (AgentExec + OpenClaw /v1/chat/completions). AgentDescriptor convention established. CDI test pattern fixed (engine#536 filed). Two new engine issues filed (engine#536, engine#537).
+# Handoff — 2026-06-19
+*Updated: engine#536, engine#537 closed — removed from backlog.*
+
+life#25 closed — first real LLM-backed worker (AgentExec + OpenClaw /v1/chat/completions). AgentDescriptor convention established. CDI test pattern fixed. engine#536 and engine#537 landed upstream — @QuarkusTest and AppointmentCycle integration tests now unblocked.
 
 ## Last Session
 
 Implemented `WorkerFunction.AgentExec(Agent)` for `book-appointment-agent` in `AppointmentCycleCaseHub`. The key discovery: `AgentExec` and `WorkerProvisioner` are completely different engine execution paths — cannot be substituted. Life#25 uses OpenClaw as an LLM server (`/v1/chat/completions`), not the WorkerProvisioner heartbeat path. Full Layer 7 (real skills: calendar, Home Assistant, banking APIs) requires separate work via `life#37` (WorkerProvisioner) or `life#38` (`/hooks/agent` bridge).
 
-Major CDI testing fix: `@InjectMock` on `@ApplicationScoped` beans causes Quarkus CDI restart → `BlackboardEventCodecRegistrar` double-registers Vert.x codecs → all subsequent `@QuarkusTest` classes fail. Fix: `@Alternative @Priority(10)` CDI test bean registered in `selected-alternatives`. This also unmasked `CaseContextChangedEventHandler` running JPA on IO thread (engine#537).
-
-Build verification: unit tests pass (3/3). Integration tests fail due to pre-existing `CaseContextChangedEventHandler` IO thread violation (engine#537). `ShowcaseScenarioTest` fails with pre-existing optimistic lock race (unrelated).
+CDI test pattern fixed: `@Alternative @Priority(10)` CDI test bean replaces `@InjectMock` to avoid Quarkus CDI restart → Vert.x codec double-registration.
 
 ## Immediate Next Step
 
-Fix `CaseContextChangedEventHandler` IO thread violation in engine (engine#537) — once that lands the AppointmentCycle integration tests should go green. OR start life#37 (WorkerProvisioner wiring) / life#38 (/hooks/agent bridge) for real Layer 7. Either is unblocked.
+engine#536 and engine#537 are closed. Pull latest engine SNAPSHOT, then run the AppointmentCycle integration tests to confirm they're green. If green, start life#38 (`/hooks/agent` direct-call bridge) or life#36 (fix `LifeCaseResourceTest` NoSuchMethodError — quick S/Low).
 
 ## What's Left
 
-- life#37 — Layer 7 (full): wire `OpenClawWorkerProvisioner` — heartbeat mode · L · High
 - life#38 — Layer 7: `/hooks/agent` direct-call integration — real skills · L · High
-- life#26 — RBAC-differentiated risk thresholds (blocked on `parent#251` — auth retrofit) · M · Med
+- life#37 — Layer 7 (full): wire `OpenClawWorkerProvisioner` — heartbeat mode · L · High
 - life#36 — fix `LifeCaseResourceTest` NoSuchMethodError — `CaseHubRuntime.signal()` engine SNAPSHOT · S · Low
-- engine#536 — `BlackboardEventCodecRegistrar` idempotency (blocks all @QuarkusTest) · S · Low
-- engine#537 — `CaseContextChangedEventHandler` @Blocking annotation (blocks AppointmentCycle integration tests) · S · Low
+- life#26 — RBAC-differentiated risk thresholds (blocked on `parent#251` — auth retrofit) · M · Med
 - casehubio/engine#527 — add `baseUrl` to `OpenAiChatModelProvider` (deletes `LifeOpenClawChatModelProvider`) · S · Low
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| engine#536 | BlackboardEventCodecRegistrar idempotency | S | Low | Unblocks all @QuarkusTest |
-| engine#537 | CaseContextChangedEventHandler @Blocking | S | Low | Unblocks AppointmentCycle tests |
-| #38 | /hooks/agent direct-call bridge for Layer 7 | L | High | Real OpenClaw skills |
-| #37 | WorkerProvisioner heartbeat mode | L | High | Full Layer 7 |
+| life#36 | Fix LifeCaseResourceTest NoSuchMethodError | S | Low | Quick unblock — engine SNAPSHOT |
+| life#38 | /hooks/agent direct-call bridge for Layer 7 | L | High | Real OpenClaw skills |
+| life#37 | WorkerProvisioner heartbeat mode | L | High | Full Layer 7 |
+| life#26 | RBAC-differentiated risk thresholds | M | Med | Blocked on parent#251 (auth) |
 
 ## References
 
