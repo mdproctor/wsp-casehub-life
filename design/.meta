@@ -1,0 +1,9 @@
+branch: issue-36-fix-caseruntime-signal
+project-sha: 2efdda703fd8cba8206ab8483651874b0fa5e0c3
+date: 2026-06-19
+issue: 36
+issue-repo: casehubio/life
+covers: 36
+flyway-next-v: none
+design-repo: workspace
+design-section-hashes: 
