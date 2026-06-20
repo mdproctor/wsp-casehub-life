@@ -1,5 +1,7 @@
-# Handoff — 2026-06-19
-life#36 closed — @QuarkusTest suite fully green (286 tests, 0 skipped). No code change in life needed; engine SNAPSHOT already had the restored signal() signature. Stale CLAUDE.md status warning removed. PR #39 open, CI green — ready to merge.
+# Handoff — 2026-06-20
+*Updated: PR #39 merged — removed from backlog.*
+
+life#36 closed — @QuarkusTest suite fully green (286 tests, 0 skipped). No code change in life needed; engine SNAPSHOT already had the restored signal() signature. Stale CLAUDE.md status warning removed. PR #39 merged.
 
 ## Last Session
 
@@ -9,7 +11,7 @@ Cleaned up CLAUDE.md (removed stale @QuarkusTest status row, engine#536 parenthe
 
 ## Immediate Next Step
 
-Merge PR #39 (`docs: remove stale engine#536/537 references`) — CI is green, no issues blocking. Then start life#38 (`/hooks/agent` direct-call bridge) or life#37 (WorkerProvisioner) for Layer 7.
+Start life#38 (`/hooks/agent` direct-call bridge) or life#37 (WorkerProvisioner) for Layer 7 full. PR #39 already merged.
 
 Run `/work` when ready.
 
@@ -24,7 +26,6 @@ Run `/work` when ready.
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| PR #39 | Merge — CI green | XS | Low | Ready now |
 | life#38 | /hooks/agent direct-call bridge for Layer 7 | L | High | Real OpenClaw skills |
 | life#37 | WorkerProvisioner heartbeat mode | L | High | Full Layer 7 |
 | life#26 | RBAC-differentiated risk thresholds | M | Med | Blocked on parent#251 (auth) |
