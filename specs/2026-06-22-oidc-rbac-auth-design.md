@@ -9,11 +9,12 @@
 
 ## Context
 
-`CurrentPrincipal.groups()` always returns empty in all running harnesses because no harness
-has `casehub-platform-oidc` on the classpath yet. `casehub-platform-oidc` ships
-`OidcCurrentPrincipal @RequestScoped` which reads roles from `SecurityIdentity.getRoles()`.
-Activation requires: (1) classpath dep, (2) Quarkus OIDC config, (3) `@RolesAllowed` on REST
-resources, (4) business logic that reads `groups()` (the risk classifier).
+`CurrentPrincipal.groups()` always returns empty in all running harnesses for two independent
+reasons: (1) `TenantScopedPrincipal @RequestScoped @Unremovable` from casehub-work is the
+active production `CurrentPrincipal` and its `groups()` always returns `Set.of()`; (2) no
+harness has `casehub-platform-oidc` on the classpath, so `OidcCurrentPrincipal` — which reads
+roles from `SecurityIdentity.getRoles()` — has never been activated. Both causes must be
+resolved together.
 
 life#26 (RBAC-differentiated risk thresholds) is the first consumer of real groups — no point
 implementing it before groups work, so both issues land together.
@@ -47,13 +48,22 @@ implementing it before groups work, so both issues land together.
 
 ## 2. CDI wiring
 
-**Production:** `OidcCurrentPrincipal @RequestScoped` becomes the sole `CurrentPrincipal`.
-`MockCurrentPrincipal @DefaultBean` is already excluded from production `application.properties`
-(written in anticipation of this landing). No new exclusions needed.
+**Problem:** adding `OidcCurrentPrincipal @RequestScoped` (no `@DefaultBean`, no `@Alternative`)
+to a classpath that already has `TenantScopedPrincipal @RequestScoped @Unremovable` (same
+non-default, non-alternative profile) creates two equally-eligible `CurrentPrincipal` beans.
+Quarkus throws `AmbiguousResolutionException` at startup.
+
+**Production fix:** add to `quarkus.arc.exclude-types` in production `application.properties`:
+```
+io.casehub.work.runtime.service.TenantScopedPrincipal
+```
+The test `application.properties` already excludes it. This mirrors that exclusion to production.
+After exclusion, `OidcCurrentPrincipal @RequestScoped` becomes the sole active `CurrentPrincipal`.
+`MockCurrentPrincipal @DefaultBean` (already excluded) is moot.
 
 **Tests:** `FixedCurrentPrincipal @Alternative @Priority(1)` (from `casehub-platform-testing`)
 globally displaces `OidcCurrentPrincipal @RequestScoped` for `CurrentPrincipal` injection via
-standard CDI alternative selection. No new exclusions needed.
+standard CDI alternative selection — no new exclusions needed.
 
 **Two separate paths in production:** `SecurityIdentity` → `@RolesAllowed` enforcement;
 `OidcCurrentPrincipal.groups()` bridges `SecurityIdentity.getRoles()` → `CurrentPrincipal.groups()`
@@ -72,6 +82,13 @@ controls the latter — the bridge itself is tested in `casehub-platform-oidc` u
 #   QUARKUS_OIDC_AUTH_SERVER_URL — e.g. https://auth.example.com/realms/casehub
 #   QUARKUS_OIDC_CLIENT_ID       — e.g. casehub-life
 quarkus.oidc.application-type=service
+
+# Dev profile — suppress Keycloak DevServices; provide fake OIDC config so the app starts
+# without a running OIDC server. GE-20260521-f50602: jwks-path lazy-loaded, never fetched.
+%dev.quarkus.keycloak.devservices.enabled=false
+%dev.quarkus.oidc.auth-server-url=http://localhost:8180/realms/test
+%dev.quarkus.oidc.discovery-enabled=false
+%dev.quarkus.oidc.jwks-path=protocol/openid-connect/certs
 ```
 
 ### Test application.properties
@@ -134,39 +151,55 @@ Three admin threshold entries appended to the existing scope entry.
 
 Inject `@Inject CurrentPrincipal principal`.
 
-**Request context guard** — the classifier is called during case worker execution, which may be
-async (scheduler, QHorus observer) with no HTTP request context active. `OidcCurrentPrincipal`
-is `@RequestScoped`; accessing it outside a request context throws `ContextNotActiveException`.
-Safe fallback: treat as member threshold when context is absent (never grants elevated privileges).
+**Request context guard:** `LifeActionRiskClassifier` is `@ApplicationScoped`; `OidcCurrentPrincipal`
+is `@RequestScoped`. Calling methods on the injected proxy outside an HTTP request context
+throws `ContextNotActiveException`. This happens during async worker execution (scheduler,
+QHorus observer). Guard via try/catch at each call site — idiomatic CDI, no Quarkus internal
+coupling, testable in plain Mockito by stubbing `groups()` to throw:
 
 ```java
-private boolean requestContextActive() {
-    return Arc.container().requestContext().isActive();
-}
 private boolean isAdmin() {
-    return requestContextActive() && principal.groups().contains(HouseholdGroups.ADMIN);
+    try {
+        return principal.groups().contains(HouseholdGroups.ADMIN);
+    } catch (ContextNotActiveException e) {
+        return false;
+    }
 }
+
 private boolean isJunior() {
-    return requestContextActive()
-        && !principal.groups().contains(HouseholdGroups.ADMIN)
-        && !principal.groups().contains(HouseholdGroups.MEMBER);
+    try {
+        // Negative definition is deliberate: unknown/unrecognised roles → always-gate.
+        // Fail-secure for a financial-gate system: an unrecognised identity must never
+        // act autonomously. When the platform adds a new role (e.g. household-carer),
+        // that role will gate until explicitly handled here. The JUNIOR constant is used
+        // in @RolesAllowed but not here — junior-gate behaviour is the fallback for any
+        // non-admin, non-member identity, which is the correct default for this context.
+        return !principal.groups().contains(HouseholdGroups.ADMIN)
+            && !principal.groups().contains(HouseholdGroups.MEMBER);
+    } catch (ContextNotActiveException e) {
+        return false;
+    }
 }
 ```
 
-**Threshold behavior by role:**
+When context is absent: `isAdmin()` and `isJunior()` both return `false` → member threshold
+applied. Safe: never autonomously elevates privilege; never always-gates when context is
+absent (a background worker with no principal should not require human approval for routine
+operations).
 
-| GatePolicy | ADMIN | MEMBER | JUNIOR or no context |
-|---|---|---|---|
-| `NEVER` | Autonomous | Autonomous | Autonomous |
-| `ALWAYS` | GateRequired | GateRequired | GateRequired |
-| `AMOUNT_THRESHOLD` | elevated threshold | standard threshold | always GateRequired |
+**Behavior by role:**
 
-For `AMOUNT_THRESHOLD` + junior: apply `ALWAYS`-equivalent (build gate regardless of amount,
-same gate structure as `ALWAYS` types). Cleaner than threshold=0.
+| GatePolicy | ADMIN | MEMBER | JUNIOR / unknown role | No context (async) |
+|---|---|---|---|---|
+| `NEVER` | Autonomous | Autonomous | Autonomous | Autonomous |
+| `ALWAYS` | GateRequired | GateRequired | GateRequired | GateRequired |
+| `AMOUNT_THRESHOLD` | admin threshold | member threshold | always GateRequired | member threshold |
 
-`resolveThreshold()` switches on admin vs member key per action type — same structure as
-current but selecting from two key sets. Comment preserved: "interim until HouseholdRiskRule
-descriptor pattern lands" (tracked separately in `2026-06-08-business-logic-centralization.md`).
+For `AMOUNT_THRESHOLD` + junior/unknown: apply `GateRequired` regardless of amount (equivalent
+to `ALWAYS` policy). Cleaner than threshold=0.
+
+`resolveThreshold()` selects admin or member key per action type. Comment preserved:
+"interim until HouseholdRiskRule descriptor pattern lands."
 
 ---
 
@@ -174,31 +207,33 @@ descriptor pattern lands" (tracked separately in `2026-06-08-business-logic-cent
 
 ### Existing test classes — keep green
 
-Add class-level `@TestSecurity(user="household-admin", roles={"household-admin"})` to:
-- `ExternalActorResourceTest`
-- `ExternalActorGdprResourceTest`
-- `LifeTaskResourceTest`
-- `LifeCommitmentResourceTest`
-- `LifeCaseResourceTest`
+Add class-level `@TestSecurity(user="household-admin", roles={"household-admin"})` to the
+following classes (verified package paths):
 
-This gives all existing test methods a valid authenticated admin principal without changing
-their logic. `FixedCurrentPrincipal` remains active for `CurrentPrincipal` injection in
-those tests.
+| Class | Path |
+|---|---|
+| `LifeCaseResourceTest` | `app/src/test/java/io/casehub/life/app/resource/LifeCaseResourceTest.java` |
+| `ExternalActorResourceTest` | `app/src/test/java/io/casehub/life/app/ExternalActorResourceTest.java` |
+| `ExternalActorGdprResourceTest` | `app/src/test/java/io/casehub/life/app/ExternalActorGdprResourceTest.java` |
+| `LifeTaskResourceTest` | `app/src/test/java/io/casehub/life/app/LifeTaskResourceTest.java` |
+| `LifeCommitmentResourceTest` | `app/src/test/java/io/casehub/life/app/LifeCommitmentResourceTest.java` |
 
 ### LifeActionRiskClassifierTest — add RBAC cases
 
-Add `@Mock CurrentPrincipal principal` to the existing mock-based test. New cases:
+Add `@Mock CurrentPrincipal principal` (Mockito field, injected by `@InjectMocks`). New cases:
 - Admin + amount below `ADMIN_SPEND_THRESHOLD` → Autonomous
-- Admin + amount above `ADMIN_SPEND_THRESHOLD` → GateRequired
-- Member + amount above `SPEND_THRESHOLD` → GateRequired (unchanged behaviour)
+- Admin + amount at/above `ADMIN_SPEND_THRESHOLD` → GateRequired
+- Member + amount at/above `SPEND_THRESHOLD` → GateRequired (unchanged behaviour)
 - Junior (neither group) + any amount on AMOUNT_THRESHOLD type → GateRequired
-- Context inactive (no request context) + amount above member threshold → GateRequired (member fallback)
+- Context inactive: `groups()` stubbed to throw `ContextNotActiveException` + amount above
+  member threshold → GateRequired (member fallback — background workers still gate on
+  `ALWAYS` types regardless of context)
 
 ### New LifeRestSecurityTest
 
 `@QuarkusTest` covering authorization boundaries via RestAssured + `@TestSecurity`:
 - No `@TestSecurity` (unauthenticated) → 401 on guarded endpoints
-- `household-junior` → 403 on POST/PUT/DELETE endpoints; 200 (or appropriate 4xx for empty data) on `GET /life-tasks/{id}`
+- `household-junior` → 403 on POST/PUT/DELETE endpoints; not-403 on `GET /life-tasks/{id}`
 - `household-member` → 200 on member endpoints; 403 on ADMIN-only (PUT/DELETE actor)
 - `household-admin` → 200 on all endpoints
 
