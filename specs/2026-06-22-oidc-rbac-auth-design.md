@@ -83,12 +83,15 @@ controls the latter — the bridge itself is tested in `casehub-platform-oidc` u
 #   QUARKUS_OIDC_CLIENT_ID       — e.g. casehub-life
 quarkus.oidc.application-type=service
 
-# Dev profile — disable OIDC entirely so all endpoints are accessible without auth.
-# %dev.quarkus.oidc.enabled=false: with no auth mechanism registered, Quarkus 3.x does not
-# enforce @RolesAllowed (no mechanism to authenticate against). Verify this holds in 3.32.2
-# during implementation — if endpoints still return 401, add:
-#   %dev.quarkus.http.auth.permission.default.policy=permit
+# Dev profile — disable OIDC and all security enforcement so endpoints are accessible without auth.
+# quarkus.security.auth.enabled-in-dev-mode=false activates DevModeDisabledAuthorizationController
+# (@Alternative @Priority @Singleton, quarkus-security-runtime-spi 3.32.2) which returns false from
+# isAuthorizationEnabled(). Both EagerSecurityHandler (REST enforcement) and StandardSecurityCheckInterceptor
+# (CDI path) check this flag and bail out early — @RolesAllowed is not enforced in dev mode.
+# quarkus.oidc.enabled=false prevents OIDC from attempting token validation (needed in addition to
+# the auth.enabled-in-dev-mode flag to stop OIDC from intercepting requests before security is checked).
 # GE-20260521-f50602: jwks-path lazy-loaded, never fetched without a token.
+%dev.quarkus.security.auth.enabled-in-dev-mode=false
 %dev.quarkus.oidc.enabled=false
 %dev.quarkus.keycloak.devservices.enabled=false
 %dev.quarkus.oidc.auth-server-url=http://localhost:8180/realms/test
@@ -273,9 +276,9 @@ The three existing AMOUNT_THRESHOLD tests then correctly exercise the member-thr
 
 `@QuarkusTest` covering authorization boundaries via RestAssured + `@TestSecurity`:
 - No `@TestSecurity` (unauthenticated) → 401 on guarded endpoints
-- `household-junior` → 403 on POST/PUT/DELETE endpoints; not-403 on `GET /life-tasks/{id}`
-- `household-member` → 200 on member endpoints; 403 on ADMIN-only (PUT/DELETE actor)
-- `household-admin` → 200 on all endpoints
+- `household-junior` → 403 on POST/PUT/DELETE endpoints; not 401, not 403 on `GET /life-tasks/{id}`
+- `household-member` → not 401, not 403 on member endpoints; 403 on ADMIN-only (PUT/DELETE actor)
+- `household-admin` → not 401, not 403 on all endpoints
 
 ---
 
