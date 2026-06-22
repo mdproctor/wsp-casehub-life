@@ -1,37 +1,38 @@
-# Handoff — 2026-06-20
-*Updated: PR #39 merged — removed from backlog.*
+# HANDOFF — casehub-life
 
-life#36 closed — @QuarkusTest suite fully green (286 tests, 0 skipped). No code change in life needed; engine SNAPSHOT already had the restored signal() signature. Stale CLAUDE.md status warning removed. PR #39 merged.
+**Date:** 2026-06-22
+**Project:** `/Users/mdproctor/claude/casehub/life`
+**Workspace:** `/Users/mdproctor/claude/public/casehub/life`
+
+---
 
 ## Last Session
 
-Picked up the two unblocked engine issues (engine#536, engine#537 both fixed). Expected to need to update `CaseHubRuntime.signal()` call site in `LifeCaseService` — checking `javap` on the installed SNAPSHOT jar showed the method was already present with the correct signature. `LifeCaseResourceTest` passed first try with no changes. Full suite: 286 tests, 0 failures, 0 skipped across all 52 test classes including all 8 `*IntegrationTest` classes.
-
-Cleaned up CLAUDE.md (removed stale @QuarkusTest status row, engine#536 parenthetical refs) and ARC42STORIES.MD (improvement refs marked resolved). PR #39 created, CI green.
+Auth retrofit complete. `casehub-platform-oidc` wired — `OidcCurrentPrincipal @RequestScoped` is the active `CurrentPrincipal` in production. `@RolesAllowed` on all 12 endpoints across 5 REST resources (household-admin/member/junior). RBAC-differentiated risk thresholds in `LifeActionRiskClassifier`: admin elevated (spend/contractor 500, booking 300), junior always-gates on AMOUNT_THRESHOLD, context-inactive falls back to member threshold. Commits squashed 9→3 and pushed to origin/main. Closes life#40 and life#26.
 
 ## Immediate Next Step
 
-Start life#38 (`/hooks/agent` direct-call bridge) or life#37 (WorkerProvisioner) for Layer 7 full. PR #39 already merged.
+Pick from What's Next — all unblocked. life#41 (junior data-level task filter) is the direct follow-on if RBAC work continues.
 
-Run `/work` when ready.
+## Cross-Module
 
-## What's Left
-
-- life#38 — Layer 7: `/hooks/agent` direct-call integration — real skills · L · High
-- life#37 — Layer 7 (full): wire `OpenClawWorkerProvisioner` — heartbeat mode · L · High
-- life#26 — RBAC-differentiated risk thresholds (blocked on `parent#251` — auth retrofit) · M · Med
-- casehubio/engine#527 — add `baseUrl` to `OpenAiChatModelProvider` (deletes `LifeOpenClawChatModelProvider`) · S · Low
+**We're enabling:**
+- casehub-devtown and casehub-clinical — same OIDC wiring pattern (parent#251); devtown#90 in progress in its own session
+- parent#300 filed — PLATFORM.md + casehub-life.md sync needed in casehub-parent (peer repo)
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| life#38 | /hooks/agent direct-call bridge for Layer 7 | L | High | Real OpenClaw skills |
-| life#37 | WorkerProvisioner heartbeat mode | L | High | Full Layer 7 |
-| life#26 | RBAC-differentiated risk thresholds | M | Med | Blocked on parent#251 (auth) |
+| #41 | junior data-level task visibility filter — GET /life-tasks/{id} own-tasks-only | M | Med | Follows life#40 ✅ |
+| #103 | Credential resolution — secrets backend for `credentialRef` | M | Med | Unblocked |
+| #85 | ScimDIDResolver — synthetic DID from SCIM | M | Med | Unblocked |
+| #105 | LangChain4j AgentProvider bridge (provider-agnostic) | M | Med | Unblocked |
+| #84 | JwtVCValidator — W3C VC JWT credential validation | M | High | Unblocked |
 
 ## References
 
-- Blog: `blog/2026-06-19-mdp01-snapshot-already-moved.md`
-- PR: casehubio/life#39
-- Garden: GE-20260618-248ce7, GE-20260618-c552c3, GE-20260618-a7a383, GE-20260618-5008f5, GE-20260618-8526c8, GE-20260618-fe7c8e
+- Diary: `blog/2026-06-22-mdp01-first-harness-with-real-auth.md`
+- Spec: `docs/specs/2026-06-22-oidc-rbac-auth-design.md`
+- Protocols: PP-20260622-eb234d (oidc-harness-wiring-checklist), PP-20260622-44f497 (rbac-classifier-context-guard)
+- Garden: GE-20260622-580d45 (auth.enabled-in-dev-mode=false technique)
