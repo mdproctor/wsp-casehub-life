@@ -83,8 +83,13 @@ controls the latter — the bridge itself is tested in `casehub-platform-oidc` u
 #   QUARKUS_OIDC_CLIENT_ID       — e.g. casehub-life
 quarkus.oidc.application-type=service
 
-# Dev profile — suppress Keycloak DevServices; provide fake OIDC config so the app starts
-# without a running OIDC server. GE-20260521-f50602: jwks-path lazy-loaded, never fetched.
+# Dev profile — disable OIDC entirely so all endpoints are accessible without auth.
+# %dev.quarkus.oidc.enabled=false: with no auth mechanism registered, Quarkus 3.x does not
+# enforce @RolesAllowed (no mechanism to authenticate against). Verify this holds in 3.32.2
+# during implementation — if endpoints still return 401, add:
+#   %dev.quarkus.http.auth.permission.default.policy=permit
+# GE-20260521-f50602: jwks-path lazy-loaded, never fetched without a token.
+%dev.quarkus.oidc.enabled=false
 %dev.quarkus.keycloak.devservices.enabled=false
 %dev.quarkus.oidc.auth-server-url=http://localhost:8180/realms/test
 %dev.quarkus.oidc.discovery-enabled=false
@@ -205,7 +210,7 @@ to `ALWAYS` policy). Cleaner than threshold=0.
 
 ## 6. Test plan
 
-### Existing test classes — keep green
+### Existing REST test classes — keep green
 
 Add class-level `@TestSecurity(user="household-admin", roles={"household-admin"})` to the
 following classes (verified package paths):
@@ -218,16 +223,51 @@ following classes (verified package paths):
 | `LifeTaskResourceTest` | `app/src/test/java/io/casehub/life/app/LifeTaskResourceTest.java` |
 | `LifeCommitmentResourceTest` | `app/src/test/java/io/casehub/life/app/LifeCommitmentResourceTest.java` |
 
-### LifeActionRiskClassifierTest — add RBAC cases
+### LifeActionRiskClassifierTest (Mockito) — add RBAC cases
 
-Add `@Mock CurrentPrincipal principal` (Mockito field, injected by `@InjectMocks`). New cases:
-- Admin + amount below `ADMIN_SPEND_THRESHOLD` → Autonomous
+Add `@Mock CurrentPrincipal principal` (field injection via `@InjectMocks`). New cases:
+- Admin + amount below `ADMIN_SPEND_THRESHOLD` (500.0) → Autonomous
 - Admin + amount at/above `ADMIN_SPEND_THRESHOLD` → GateRequired
-- Member + amount at/above `SPEND_THRESHOLD` → GateRequired (unchanged behaviour)
-- Junior (neither group) + any amount on AMOUNT_THRESHOLD type → GateRequired
-- Context inactive: `groups()` stubbed to throw `ContextNotActiveException` + amount above
-  member threshold → GateRequired (member fallback — background workers still gate on
-  `ALWAYS` types regardless of context)
+- Member + amount at/above `SPEND_THRESHOLD` (100.0) → GateRequired (unchanged behaviour)
+- Junior (neither ADMIN nor MEMBER group) + any amount on `AMOUNT_THRESHOLD` type → GateRequired
+- **Context inactive:** `groups()` stubbed to throw `ContextNotActiveException`, amount above
+  `SPEND_THRESHOLD` → GateRequired (member threshold: amount 100.0 triggers gate)
+- **Context inactive + below threshold:** `groups()` stubbed to throw `ContextNotActiveException`,
+  amount below `SPEND_THRESHOLD` (e.g. 50.0) → Autonomous — validates that background workers
+  are NOT always-gated; they get member threshold, not ALWAYS policy
+
+### LifeActionRiskClassifierQuarkusTest — fix broken tests + add RBAC cases
+
+The existing AMOUNT_THRESHOLD tests break after adding RBAC: `FixedCurrentPrincipal` defaults
+to empty groups → `isJunior()` = true → all AMOUNT_THRESHOLD types return GateRequired
+regardless of amount. `spendPurchase_belowYamlThreshold_returnsAutonomous` fails; the
+at-threshold tests pass but via junior-always-gate, not the threshold path.
+
+**Fix:** inject `FixedCurrentPrincipal` by concrete type and set member groups in `@BeforeEach`:
+
+```java
+@Inject
+FixedCurrentPrincipal fixedPrincipal;   // @ApplicationScoped — directly injectable
+
+@BeforeEach
+void setMemberPrincipal() {
+    fixedPrincipal.setGroups(Set.of(HouseholdGroups.MEMBER));
+}
+
+@AfterEach
+void resetPrincipal() {
+    fixedPrincipal.reset();
+}
+```
+
+The three existing AMOUNT_THRESHOLD tests then correctly exercise the member-threshold path.
+
+**Add RBAC-specific QuarkusTest cases** (end-to-end with YAML loaded):
+- Set admin groups: `fixedPrincipal.setGroups(Set.of(HouseholdGroups.ADMIN))` →
+  spend amount below `ADMIN_SPEND_THRESHOLD` (500.0) → Autonomous (elevated threshold honoured)
+- Set admin groups → spend amount at `ADMIN_SPEND_THRESHOLD` → GateRequired
+- Set junior groups (`Set.of(HouseholdGroups.JUNIOR)`) → any AMOUNT_THRESHOLD action → GateRequired
+  (validates that junior always-gate is enforced through the full CDI + YAML stack)
 
 ### New LifeRestSecurityTest
 
