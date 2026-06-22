@@ -1,5 +1,5 @@
-# Branch Closed: issue-36-fix-caseruntime-signal
+# Branch Closed: issue-40-wire-platform-oidc
 
-**Date:** 2026-06-19
-**Issues:** 36
+**Date:** 2026-06-22
+**Issues:** 40,26
 **Status:** merged to main
