@@ -90,13 +90,9 @@ quarkus.oidc.application-type=service
 # (CDI path) check this flag and bail out early — @RolesAllowed is not enforced in dev mode.
 # quarkus.oidc.enabled=false prevents OIDC from attempting token validation (needed in addition to
 # the auth.enabled-in-dev-mode flag to stop OIDC from intercepting requests before security is checked).
-# GE-20260521-f50602: jwks-path lazy-loaded, never fetched without a token.
 %dev.quarkus.security.auth.enabled-in-dev-mode=false
 %dev.quarkus.oidc.enabled=false
 %dev.quarkus.keycloak.devservices.enabled=false
-%dev.quarkus.oidc.auth-server-url=http://localhost:8180/realms/test
-%dev.quarkus.oidc.discovery-enabled=false
-%dev.quarkus.oidc.jwks-path=protocol/openid-connect/certs
 ```
 
 ### Test application.properties
