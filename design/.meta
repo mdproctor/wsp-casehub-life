@@ -3,7 +3,7 @@ project-sha: 4b5af66d3e5056e46e575a6083a83fecca4363df
 date: 2026-06-22
 issue: 40
 issue-repo: casehubio/life
-covers: 40
+covers: 40,26
 flyway-next-v: none
 design-repo: workspace
 design-section-hashes: 
