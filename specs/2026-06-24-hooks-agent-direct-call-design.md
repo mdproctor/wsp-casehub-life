@@ -1,7 +1,7 @@
 # Design: /hooks/agent direct-call integration — first real OpenClaw workers
 
 **Issue:** casehubio/life#38
-**Date:** 2026-06-24 (rev 2: 2026-06-25)
+**Date:** 2026-06-24 (rev 3: 2026-06-25)
 **Status:** Approved
 
 ---
@@ -16,11 +16,38 @@ Workers using `WorkerFunction.AgentExec(Agent)` call OpenClaw's `/v1/chat/comple
 
 After life#38 (direct-call) and life#37 (heartbeat) both land, life supports two modes:
 
-**Direct-call (life#38):** Worker defined in CaseDefinition → `Agent.execute()` → `DirectCallChatModel.chat()` → `OpenClawHookClient.invokeDirect()` → `POST /hooks/agent` (fire-and-forget) → block virtual thread on `CompletableFuture` → webhook fires → `DirectCallDeliveryResource` completes future → `ChatResponse` → `WorkerResult`.
+**Direct-call (life#38):** Worker defined in CaseDefinition → `Agent.execute()` → `OpenClawChatModel.doChat()` → `OpenClawAgentProvider.invoke()` → `DirectCallBridge` → `OpenClawHookClient.invokeDirect()` → `POST /hooks/agent` (fire-and-forget) → webhook fires → `DirectCallDeliveryResource` completes future → `Multi<AgentEvent>` emits `TextDelta` → `ChatResponse` → `WorkerResult`.
 
 **Heartbeat (life#37):** No matching worker → `tryProvision()` → `OpenClawWorkerProvisioner.provision()` → agent registered → Qhorus COMMAND on case channel → `OpenClawChannelBackend.post()` → `POST /hooks/agent` → webhook fires → `OpenClawDeliveryResource` → Qhorus message → context change → next binding fires.
 
-Workers defined in the case definition use direct-call. Capabilities with no matching worker fall through to the provisioner. Both use `OpenClawHookClient` and `/hooks/agent`. They differ in result delivery: direct-call completes a pending future; heartbeat posts to a Qhorus channel.
+Workers defined in the case definition use direct-call. Capabilities with no matching worker fall through to the provisioner. Both use `OpenClawHookClient` and `/hooks/agent`. They differ in result delivery: direct-call completes a pending future via `AgentProvider.invoke()`; heartbeat posts to a Qhorus channel.
+
+## Abstraction layer: AgentProvider, not ChatModel
+
+The platform already has `AgentProvider` (`casehub-platform-agent-api`) as the agent SPI, with `ClaudeAgentProvider` (`casehub-platform-agent-claude`) as the established implementation and `ClaudeAgentChatModel` / `AgentSessionChatModel` (`casehub-platform-agent-claude-langchain4j`) as thin langchain4j bridges.
+
+OpenClaw follows the same pattern — two classes instead of one `DirectCallChatModel`:
+
+```
+Engine Agent → OpenClawChatModel (thin bridge, doChat()) → OpenClawAgentProvider (AgentProvider impl)
+                                                            → DirectCallBridge → /hooks/agent → webhook
+```
+
+This is the platform-coherent architecture. `ClaudeAgentChatModel` demonstrates the pattern:
+- Constructor takes `AgentProvider` + config
+- `doChat(ChatRequest)` extracts system prompt and user text from messages, builds `AgentSessionConfig`, calls `agentProvider.invoke(config)`, collects `TextDelta` events into response text
+- `validateNoJsonFormat()` — Claude rejects JSON response format
+
+OpenClaw diverges on one point: `OpenClawChatModel` does NOT reject `ResponseFormat.JSON`. Instead, it extracts the `JsonSchema` from the response format and serializes it into the user prompt as schema instructions. This adapts structured output enforcement from model-level (`response_format` parameter) to prompt-level (schema in message) — the correct adaptation for an agent endpoint that doesn't support `response_format`.
+
+**What this gives over the rev 2 design (direct ChatModel):**
+- `correlationId` is a first-class `AgentSessionConfig` field, not an internal UUID
+- `timeout` is a `Duration`, not a raw int
+- System prompt / user prompt separation is structural — `AgentSessionConfig` fields, not string concatenation at the ChatModel level
+- `Multi<AgentEvent>` is natively reactive — the async-to-reactive conversion belongs in the provider, not in the ChatModel
+- CDI priority ladder: `NoOpAgentProvider @DefaultBean` → `OpenClawAgentProvider @ApplicationScoped`
+- Forward-compatible: when the engine migrates from ChatModel to AgentProvider, OpenClaw already works
+- One timeout layer — `Multi.await().atMost()` in the ChatModel bridge; the provider's emitter `onTermination()` handles cleanup. No double-timeout race.
 
 ## Phase 1: Bridge (casehub-openclaw scope)
 
@@ -47,7 +74,7 @@ Calls `invokeInternal()` with `sessionKey=null`. No session lookup. The gateway 
 - `complete(String correlationId, String responseText)` — completes future, removes from map
 - `cancel(String correlationId)` — cancels if present, removes (idempotent cleanup)
 
-No scheduled cleanup — the caller's virtual thread timeout handles expiry; cancelled futures are removed by the calling ChatModel in a `finally` block.
+No scheduled cleanup — the emitter's `onTermination()` callback in `OpenClawAgentProvider.invoke()` handles cleanup when the `Multi` subscription is cancelled (by timeout or consumer cancellation).
 
 ### DirectCallDeliveryResource (JAX-RS)
 
@@ -59,51 +86,120 @@ No scheduled cleanup — the caller's virtual thread timeout handles expiry; can
 - `@PermitAll` — webhook callbacks carry no OIDC token
 - Production deployments must use HTTPS for the callback base URL and restrict network access to the OpenClaw Gateway (firewall rules, VPC, or service mesh)
 
-### DirectCallChatModel (implements langchain4j ChatModel)
+### OpenClawAgentProvider (`@ApplicationScoped`, implements AgentProvider)
 
-Constructor: `(DirectCallBridge, OpenClawHookClient, String openClawAgentId, String callbackBaseUrl, int timeoutSeconds)`
+Follows `ClaudeAgentProvider` pattern — implements the platform's agent SPI.
 
-`chat(ChatRequest)`:
-1. Extract system message text and user message text from ChatRequest
-2. Extract `JsonSchema` from `ChatRequest.responseFormat()` and serialize as a human-readable schema block (field names, types, required fields)
-3. Build the combined message: `systemPrompt + "\n\n" + schemaBlock + "\n\n" + userText`
-4. Generate correlationId (UUID)
-5. `future = bridge.submit(correlationId)`
-6. `deliveryUrl = callbackBaseUrl + "/openclaw/direct-call/" + correlationId`
-7. `int effectiveTimeout = Math.max(timeoutSeconds - 5, 5)` — shorter than executor timeout to ensure consistent error handling
-8. `hookClient.invokeDirect(openClawAgentId, combinedMessage, null, timeoutSeconds, deliveryUrl)`
-9. `responseText = future.get(effectiveTimeout, SECONDS)` — blocks virtual thread
-10. Validate `responseText` is valid JSON (`MAPPER.readTree(responseText)`) — fail fast with `AgentException("OpenClaw agent returned invalid JSON")` rather than propagating malformed responses
-11. `finally: bridge.cancel(correlationId)` — idempotent cleanup
-12. Return `ChatResponse` wrapping response text as `AiMessage`
+```java
+public Multi<AgentEvent> invoke(AgentSessionConfig config) {
+    return Multi.createFrom().emitter(emitter -> {
+        String correlationId = config.correlationId() != null
+                ? config.correlationId() : UUID.randomUUID().toString();
+        CompletableFuture<String> future = bridge.submit(correlationId);
+        String deliveryUrl = deliveryBaseUrl + "/openclaw/direct-call/" + correlationId;
 
-**System prompt forwarding:** The CaseHub `Agent` class sends a `ChatRequest` containing both a `SystemMessage` and a `UserMessage`. `DirectCallChatModel` combines them into the single `message` field for `/hooks/agent`. The system prompt carries persona instructions and task guidance. OpenClaw agents have their own system prompts configured server-side (persona-level: skills, capabilities); CaseHub's system prompt is task-level (what to do, how to format output). They are complementary, not conflicting.
+        String message = config.systemPrompt() + "\n\n" + config.userPrompt();
 
-**Response schema forwarding:** The `JsonSchema` from `ChatRequest.responseFormat()` is automatically extracted and serialized into the message. This makes `responseSchema(BookingResult.class)` meaningful regardless of backend — the worker author doesn't need to manually describe JSON format in the system prompt. Enforcement shifts from model-level (response_format parameter) to prompt-level (schema instructions in message), which is the correct adaptation for an agent endpoint that doesn't support response_format.
+        emitter.onTermination(() -> bridge.cancel(correlationId));
+
+        try {
+            hookClient.invokeDirect(agentId, message, null,
+                    (int) config.timeout().toSeconds(), deliveryUrl);
+        } catch (OpenClawInvocationException e) {
+            emitter.fail(e);
+            return;
+        }
+
+        future.whenComplete((text, error) -> {
+            if (error != null) {
+                emitter.fail(error);
+            } else {
+                emitter.emit(new AgentEvent.TextDelta(text));
+                emitter.complete();
+            }
+        });
+    });
+}
+
+public AgentSession openSession(AgentSessionInit init) {
+    throw new UnsupportedOperationException(
+            "OpenClaw direct-call is single-shot — use invoke()");
+}
+```
+
+Constructor: `(DirectCallBridge bridge, OpenClawHookClient hookClient, String agentId, String deliveryBaseUrl)`
+
+Note: `OpenClawAgentProvider` is NOT a CDI `@ApplicationScoped` singleton like `ClaudeAgentProvider`. Each `OpenClawChatModel` creates its own provider instance configured for a specific OpenClaw agentId. The CDI priority ladder (`NoOpAgentProvider @DefaultBean` → `OpenClawAgentProvider`) applies when OpenClaw is the ONLY agent provider; for direct-call, the provider is wired per-worker through the factory.
+
+### OpenClawChatModel (thin langchain4j bridge, follows ClaudeAgentChatModel pattern)
+
+Implements `ChatModel`. Bridges from langchain4j to `AgentProvider`.
+
+`doChat(ChatRequest)`:
+1. Extract system prompt via `extractSystemPrompt(request.messages())` (same helper pattern as `ClaudeAgentChatModel`)
+2. Extract user text via `extractLastUserText(request.messages())`
+3. If `request.responseFormat()` contains a `JsonSchema`: extract and serialize as a human-readable schema block, prepend to user text
+4. Build `AgentSessionConfig(systemPrompt, userPromptWithSchema, List.of(), timeout, correlationId)`
+5. Call `agentProvider.invoke(config)` → `Multi<AgentEvent>`
+6. Collect `TextDelta` events: `.filter(TextDelta.class::isInstance).map(TextDelta::text).collect().asList().await().atMost(timeout)` — blocks virtual thread via reactive timeout
+7. Join collected text fragments
+8. Validate response is valid JSON (`MAPPER.readTree(responseText)`) — throw `AgentException("OpenClaw agent returned invalid JSON")` if parsing fails
+9. Return `ChatResponse` wrapping response text as `AiMessage`
+
+Does NOT call `validateNoJsonFormat()` — unlike `ClaudeAgentChatModel`, OpenClaw handles JSON format via schema-in-prompt.
+
+Constructor: `(OpenClawAgentProvider provider, Duration timeout)`
+
+### Schema serialization format
+
+The `JsonSchema` from `ChatRequest.responseFormat()` is serialized as a human-readable schema block. Example for `BookingResult`:
+
+```
+Respond with JSON matching schema "BookingResult":
+{
+  "appointmentId": string (required),
+  "provider": string (required),
+  "confirmed": boolean (required),
+  "declined": boolean (required),
+  "reason": string (required)
+}
+```
+
+This block is prepended to the user text. The OpenClaw agent receives both the schema requirements and the task-specific content in one message.
 
 ### Timeout design
 
-Two independent timeouts apply:
-1. `DirectCallChatModel.chat()` — `future.get(effectiveTimeout, SECONDS)` → `java.util.concurrent.TimeoutException`
-2. `DefaultWorkerExecutor.executeSync()` — Mutiny `.ifNoItem().after(Duration)` → `io.smallrye.mutiny.TimeoutException`
+One timeout layer — in `OpenClawChatModel.doChat()` via `Multi.await().atMost(timeout)`. When the reactive timeout fires:
+1. The `Multi` subscription is cancelled
+2. The emitter's `onTermination()` callback fires → `bridge.cancel(correlationId)` — removes the pending future
+3. `await()` throws `TimeoutException` → caught and wrapped as `AgentException`
 
-These are different exception types with different handling. The ChatModel timeout must be shorter (by 5 seconds, minimum 5s floor) to ensure it fires first. `DirectCallChatModel` catches `java.util.concurrent.TimeoutException` and throws `AgentException("OpenClaw agent timed out after " + effectiveTimeout + "s")`, giving `Agent.execute()` a consistent error type. If the ChatModel timeout somehow doesn't fire, the executor timeout produces `WorkerResult.expired()` as a backstop.
+The `DefaultWorkerExecutor.executeSync()` Mutiny timeout is a backstop only. The reactive timeout inside `doChat()` fires first because it's set to the worker-configured timeout, while the executor uses the same value. If the reactive timeout fires, the virtual thread unblocks with an `AgentException` before the executor timeout can act.
 
 ### Failure modes
 
-**(a) `hookClient.invokeDirect()` throws `OpenClawInvocationException`** — network error or non-2xx. Happens after `bridge.submit()` has registered the future. The `finally` block calls `bridge.cancel(correlationId)`, removing the orphaned future. The exception propagates through `Agent.execute()` as an unrecoverable worker failure.
+**(a) `hookClient.invokeDirect()` throws `OpenClawInvocationException`** — network error or non-2xx. The emitter calls `emitter.fail(e)`. The `onTermination()` callback fires → `bridge.cancel(correlationId)`. The exception propagates through `Multi.await()` → caught and wrapped as `AgentException` in `doChat()`.
 
-**(b) Webhook delivers an error response** — OpenClaw agent failed internally. `OpenClawDeliveryPayload.output()` contains an error message instead of expected JSON. `bridge.complete()` completes the future with the error text. `DirectCallChatModel` validates JSON (step 10) and throws `AgentException` if parsing fails. This gives a clean error rather than downstream field-mismatch failures.
+**(b) Webhook delivers an error response** — OpenClaw agent failed internally. `OpenClawDeliveryPayload.output()` contains an error message instead of expected JSON. `bridge.complete()` completes the future with the error text. The emitter emits a `TextDelta` with the error text. `doChat()` validates JSON (step 8) and throws `AgentException` if parsing fails.
 
-**(c) Webhook arrives after timeout** — ChatModel timeout fires, `future.get()` throws, `finally` cancels and removes the future from the map. The late webhook calls `bridge.complete(correlationId, responseText)` → `futures.get(correlationId)` returns null → silently ignored. No leak, no side effects. The cancelled `CompletableFuture` is already removed from the map.
+**(c) Webhook arrives after timeout** — reactive timeout cancels the Multi subscription → `onTermination()` fires → `bridge.cancel(correlationId)` → future cancelled and removed from map. The late webhook calls `bridge.complete(correlationId, responseText)` → no future in map → silently ignored. No leak, no side effects.
 
 ## Phase 2: Life consumption
 
 ### New components (life `app/`)
 
 **`LifeOpenClawChatModelFactory`** (`@ApplicationScoped`)
-- Injects `DirectCallBridge`, `OpenClawHookClient`, config
-- `ChatModelProvider forAgent(String openClawAgentId)` — returns a `ChatModelProvider` whose `get()` creates a `DirectCallChatModel` for that agent
+- Injects `DirectCallBridge`, `OpenClawHookClient`, config (`casehub.openclaw.delivery.base-url`, `casehub.openclaw.agent.default-timeout-seconds`)
+- `ChatModelProvider forAgent(String openClawAgentId)`:
+  ```java
+  public ChatModelProvider forAgent(String openClawAgentId) {
+      var provider = new OpenClawAgentProvider(
+              bridge, hookClient, openClawAgentId, deliveryBaseUrl);
+      var chatModel = new OpenClawChatModel(provider,
+              Duration.ofSeconds(timeoutSeconds));
+      return () -> chatModel;
+  }
+  ```
 - Each worker calls `factory.forAgent("health-agent")` and passes to `Agent.builder().model(...)`
 
 **`TestLifeOpenClawChatModelFactory`** (`@Alternative @Priority(10)`)
@@ -128,7 +224,8 @@ These are different exception types with different handling. The ChatModel timeo
 ### Dependencies
 
 - Add `casehub-openclaw-core` (OpenClawHookClient, OpenClawGatewayClient, OpenClawClientConfig)
-- Add `casehub-openclaw-casehub` (DirectCallBridge, DirectCallDeliveryResource, DirectCallChatModel)
+- Add `casehub-openclaw-casehub` (DirectCallBridge, DirectCallDeliveryResource, OpenClawAgentProvider, OpenClawChatModel)
+- Add `casehub-platform-agent-api` (AgentProvider, AgentSessionConfig, AgentEvent — transitive via openclaw-casehub but listed for clarity)
 - Remove `langchain4j-open-ai` runtime dep (no longer calling `/v1/chat/completions` directly)
 
 ### Configuration
@@ -168,9 +265,9 @@ FamilyVoteCaseHub has no workers (pure humanTask). Total: 32 workers converted.
 ### Per-worker requirements
 
 Each converted worker needs:
-1. System prompt — persona + task instructions (JSON format instructions are no longer needed here — the auto-extracted schema handles format enforcement)
+1. System prompt — persona + task instructions (JSON format instructions are no longer needed — the auto-extracted schema handles format enforcement)
 2. User message template — `{{variable}}` placeholders from case context
-3. Response schema — Java record defining structured output (auto-serialized into the message by `DirectCallChatModel`)
+3. Response schema — Java record defining structured output (auto-serialized into the message by `OpenClawChatModel`)
 4. AgentDescriptor — `{model-family}:{persona}@{major}` identity
 5. Factory call — `factory.forAgent("<openClawAgentId>")`
 
@@ -227,15 +324,16 @@ Each converted worker needs:
 **Bridge tests (casehub-openclaw):**
 - `DirectCallBridgeTest` — submit/complete/cancel lifecycle, concurrency, complete-after-cancel is no-op
 - `DirectCallDeliveryResourceTest` — receives payload, completes bridge, always 200; unknown correlationId returns 200 (idempotent)
-- `DirectCallChatModelTest` — mock bridge + hookClient; deliveryUrl construction, system prompt + schema prepended to message, JSON validation on response, timeout throws AgentException; verify `invokeDirect()` called (not `invoke()`)
+- `OpenClawAgentProviderTest` — mock bridge + hookClient; verifies `invokeDirect()` called with correct deliveryUrl; Multi emits TextDelta on future completion; emitter onTermination cancels bridge; failure paths (invocation exception, late webhook)
+- `OpenClawChatModelTest` — system prompt + schema extraction from ChatRequest; schema serialized as human-readable block; JSON validation on response; timeout throws AgentException; ResponseFormat.JSON handled (not rejected)
 
 **Life tests:**
-- `LifeOpenClawChatModelFactoryTest` — `forAgent()` returns correct ChatModelProvider
+- `LifeOpenClawChatModelFactoryTest` — `forAgent()` creates provider + chatModel with correct agentId
 - 31 new response schema records + BookingResult (existing) — Jackson serialization roundtrip tests
 - Existing integration tests unchanged — `TestLifeOpenClawChatModelFactory` replaces test provider; serves canned responses for all 32 workers keyed by user message text
 - No integration tests for the bridge itself — bridge unit tests in casehub-openclaw cover correctness; life integration tests use the test factory
 
 ## Deferred issues
 
-- **casehubio/engine#569: Convenience — make `AgentBuilder.model(ChatModel)` public** — currently package-private. `ChatModelProvider` is the designed public API; using it through a factory is the intended pattern, not a workaround. Making `model(ChatModel)` public would avoid needing a `ChatModelProvider` wrapper when the `ChatModel` instance is already in hand. Non-blocking; the factory pattern works correctly.
+- **casehubio/engine#569: Convenience — make `AgentBuilder.model(ChatModel)` public** — currently package-private. `ChatModelProvider` is the designed public API; using it through a factory is the intended pattern. Making `model(ChatModel)` public would avoid needing a `ChatModelProvider` wrapper when the `ChatModel` instance is already in hand. Non-blocking; the factory pattern works correctly.
 - **life#37: WorkerProvisioner heartbeat mode** — Phase 2 of the two-mode architecture. Uses the existing `OpenClawWorkerProvisioner` in casehub-openclaw-casehub.
