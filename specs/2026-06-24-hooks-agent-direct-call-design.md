@@ -1,7 +1,7 @@
 # Design: /hooks/agent direct-call integration — first real OpenClaw workers
 
 **Issue:** casehubio/life#38
-**Date:** 2026-06-24 (rev 3: 2026-06-25)
+**Date:** 2026-06-24 (rev 4: 2026-06-25)
 **Status:** Approved
 
 ---
@@ -45,13 +45,23 @@ OpenClaw diverges on one point: `OpenClawChatModel` does NOT reject `ResponseFor
 - `timeout` is a `Duration`, not a raw int
 - System prompt / user prompt separation is structural — `AgentSessionConfig` fields, not string concatenation at the ChatModel level
 - `Multi<AgentEvent>` is natively reactive — the async-to-reactive conversion belongs in the provider, not in the ChatModel
-- CDI priority ladder: `NoOpAgentProvider @DefaultBean` → `OpenClawAgentProvider @ApplicationScoped`
+- CDI priority ladder works for single-backend deployments (e.g., Claude uses `ClaudeAgentProvider @ApplicationScoped` replacing `NoOpAgentProvider @DefaultBean`); OpenClaw's per-agent instances are created via factory, not CDI discovery
 - Forward-compatible: when the engine migrates from ChatModel to AgentProvider, OpenClaw already works
 - One timeout layer — `Multi.await().atMost()` in the ChatModel bridge; the provider's emitter `onTermination()` handles cleanup. No double-timeout race.
 
 ## Phase 1: Bridge (casehub-openclaw scope)
 
 **Blocks life#38.** Filed as casehubio/openclaw#49.
+
+### Phase 1 dependency
+
+casehub-openclaw-casehub's pom.xml needs `casehub-platform-agent-api` added — `OpenClawAgentProvider` implements `AgentProvider`, and `OpenClawChatModel` uses `AgentSessionConfig` and `AgentEvent`, all from this module:
+```xml
+<dependency>
+    <groupId>io.casehub</groupId>
+    <artifactId>casehub-platform-agent-api</artifactId>
+</dependency>
+```
 
 ### OpenClawHookClient.invokeDirect() — new sessionless overload
 
