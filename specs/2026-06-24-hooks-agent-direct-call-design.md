@@ -1,7 +1,7 @@
 # Design: /hooks/agent direct-call integration — first real OpenClaw workers
 
 **Issue:** casehubio/life#38
-**Date:** 2026-06-24 (rev 4: 2026-06-25)
+**Date:** 2026-06-24 (rev 5: 2026-06-25)
 **Status:** Approved
 
 ---
@@ -96,7 +96,7 @@ No scheduled cleanup — the emitter's `onTermination()` callback in `OpenClawAg
 - `@PermitAll` — webhook callbacks carry no OIDC token
 - Production deployments must use HTTPS for the callback base URL and restrict network access to the OpenClaw Gateway (firewall rules, VPC, or service mesh)
 
-### OpenClawAgentProvider (`@ApplicationScoped`, implements AgentProvider)
+### OpenClawAgentProvider (implements AgentProvider)
 
 Follows `ClaudeAgentProvider` pattern — implements the platform's agent SPI.
 
