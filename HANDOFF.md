@@ -1,5 +1,7 @@
 # Handoff — 2026-06-26
 
+*Updated: engine#527 closed — removed from backlog.*
+
 life#38 closed — all 32 workers across 7 YamlCaseHubs converted from stubs to real OpenClaw agents via `/hooks/agent` direct-call bridge. life#45 fixed (qhorus ACL enforcement). Engine API migration (engine#543/567) landed.
 
 ## Last Session
@@ -16,7 +18,6 @@ Run `/work` when ready.
 
 - life#37 — Layer 7 (full): wire OpenClawWorkerProvisioner — heartbeat mode · L · High
 - life#46 — refactor: extract shared AgentDescriptor factory methods · S · Low
-- casehubio/engine#527 — add baseUrl to OpenAiChatModelProvider · S · Low
 - casehubio/engine#569 — convenience: make AgentBuilder.model(ChatModel) public · XS · Low
 
 ## What's Next
