@@ -1,5 +1,5 @@
-# Branch Closed: issue-36-fix-caseruntime-signal
+# Branch Closed: issue-38-hooks-agent-direct-call
 
-**Date:** 2026-06-19
-**Issues:** 36
+**Date:** 2026-06-26
+**Issues:** 38
 **Status:** merged to main
