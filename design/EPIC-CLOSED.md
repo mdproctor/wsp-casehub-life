@@ -1,5 +1,5 @@
-# Branch Closed: issue-36-fix-caseruntime-signal
+# Branch Closed: issue-34-gdpr-casememorystore-erasure
 
-**Date:** 2026-06-19
-**Issues:** 36
+**Date:** 2026-06-29
+**Issues:** 34
 **Status:** merged to main
