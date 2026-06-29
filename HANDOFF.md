@@ -1,5 +1,7 @@
 # Handoff — 2026-06-29
 
+*Updated: engine#569 closed — removed from backlog.*
+
 Quality sweep complete. Closed #30 (scattered business logic audit), #31 (ledger fields), #41 (junior visibility), #42 (MCP verification), #43 (CDI exclude-types). All 5 issues merged to main. 517 tests green.
 
 ## Last Session
@@ -12,7 +14,6 @@ Pick up life#47 (structural CaseHub duplication — augment pattern, cap() helpe
 
 ## What's Left
 
-- casehubio/engine#569 — convenience: make AgentBuilder.model(ChatModel) public · XS · Low
 - life#47 — structural CaseHub duplication (augment pattern, cap() helper) · M · Low
 - life#48 — per-action jurisdiction on LegalActionLedgerEntry · S · Med
 - (to file on engine) — engine should call terminate() on provisioner at case terminal state
