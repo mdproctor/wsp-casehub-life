@@ -8,6 +8,11 @@
 
 **Tech Stack:** Java 21, Quarkus 3.32.2, casehub-engine-api 0.2-SNAPSHOT (engine#591)
 
+**Supersedes:** This plan supersedes the §Case Hub Descriptors design in `docs/specs/2026-06-08-business-logic-centralization.md` (life#27). Key divergences:
+- `configureCase(CaseDefinition)` void mutation hook replaces `protected abstract List<Worker> workers()` — handles TravelPlanCaseHub's SubCase bindings which `workers()` cannot express
+- No Descriptor POJOs — worker construction stays inline in CaseHub subclasses because CDI deps (`openClawFactory`, `descriptorFactory`) must flow through anyway, making a separate POJO pure indirection
+- `augment(CaseDefinition)` replaces `getDefinition()` as the final template method — engine#591 moved caching to `YamlCaseHub.getDefinition()`, which is now `final` and calls `augment()` as the extension point
+
 **Spec:** `specs/2026-06-30-casehub-structural-duplication-design.md` (design-reviewed, 4 rounds, 12/12 issues resolved)
 
 ## Global Constraints
@@ -16,7 +21,7 @@
 - `Worker.Builder` uses `capabilityName(String)` — `capabilities(List<Capability>)` no longer exists
 - Worker name convention: `{capabilityName}-agent` — enforced by `agentWorker()` helper
 - `FamilyVoteCaseHub` — unchanged (no augmentation, no agent)
-- `LifeCaseService` — NOT changed this issue (switch elimination deferred to life#27)
+- `LifeCaseService` — NOT changed this issue (switch elimination deferred to life#51)
 - All files in `app/src/main/java/io/casehub/life/app/engine/`
 
 ---
@@ -29,7 +34,7 @@
 
 **Interfaces:**
 - Consumes: `YamlCaseHub.augment(CaseDefinition)` from engine-api, `LifeOpenClawChatModelFactory.forAgent(LifeAgent)`, `LifeAgentDescriptorFactory.descriptorFor(LifeAgent)`, `LifeCaseType` enum from api/
-- Produces: `LifeTypedCaseHub` abstract class — Task 2 subclasses extend it; `agentWorker(String, String, Class<?>)` returns `Worker`; `configureCase(CaseDefinition)` hook; `lifeCaseType()` abstract method; `agent()` protected getter
+- Produces: `LifeTypedCaseHub` abstract class — Task 2 subclasses extend it; `agentWorker(String, String, Class<?>)` returns `Worker`; `configureCase(CaseDefinition)` abstract hook; `lifeCaseType()` abstract method; `agent()` protected getter
 
 - [ ] **Step 1: Write the failing test**
 
@@ -86,6 +91,42 @@ class LifeTypedCaseHubTest {
         assertThat(hub.agent()).isEqualTo(LifeAgent.HEALTH);
     }
 
+    @Test
+    void augmentCallsConfigureCaseThenRegistersDescriptors() {
+        var hub = createHub();
+        var definition = mock(CaseDefinition.class);
+        when(definition.getWorkers()).thenReturn(new java.util.ArrayList<>());
+        hub.augment(definition);
+
+        assertThat(hub.configureCaseCalled).isTrue();
+        verify(mockDescriptorFactory).descriptorFor(LifeAgent.HEALTH);
+        verify(definition).setAgentDescriptors(any());
+    }
+
+    @Test
+    void augmentProducesWorkersAndDescriptorsTogether() {
+        var hub = createHubWithWorker();
+        var workers = new java.util.ArrayList<Worker>();
+        var definition = mock(CaseDefinition.class);
+        when(definition.getWorkers()).thenReturn(workers);
+        hub.augment(definition);
+
+        assertThat(workers).hasSize(1);
+        assertThat(workers.get(0).name()).isEqualTo("test-cap-agent");
+        verify(definition).setAgentDescriptors(any());
+    }
+
+    @Test
+    void agentPassedToFactories() {
+        var hub = createHub();
+        var definition = mock(CaseDefinition.class);
+        when(definition.getWorkers()).thenReturn(new java.util.ArrayList<>());
+        hub.augment(definition);
+
+        verify(mockFactory, org.mockito.Mockito.never()).forAgent(any());
+        verify(mockDescriptorFactory).descriptorFor(LifeAgent.HEALTH);
+    }
+
     private TestCaseHub createHub() {
         var hub = new TestCaseHub();
         hub.openClawFactory = mockFactory;
@@ -93,7 +134,16 @@ class LifeTypedCaseHubTest {
         return hub;
     }
 
+    private TestCaseHubWithWorker createHubWithWorker() {
+        var hub = new TestCaseHubWithWorker();
+        hub.openClawFactory = mockFactory;
+        hub.descriptorFactory = mockDescriptorFactory;
+        return hub;
+    }
+
     static class TestCaseHub extends LifeTypedCaseHub {
+        boolean configureCaseCalled = false;
+
         TestCaseHub() {
             super("life/appointment-cycle.yaml", LifeAgent.HEALTH);
         }
@@ -101,6 +151,27 @@ class LifeTypedCaseHubTest {
         @Override
         public LifeCaseType lifeCaseType() {
             return LifeCaseType.APPOINTMENT_CYCLE;
+        }
+
+        @Override
+        protected void configureCase(CaseDefinition definition) {
+            configureCaseCalled = true;
+        }
+    }
+
+    static class TestCaseHubWithWorker extends LifeTypedCaseHub {
+        TestCaseHubWithWorker() {
+            super("life/appointment-cycle.yaml", LifeAgent.HEALTH);
+        }
+
+        @Override
+        public LifeCaseType lifeCaseType() {
+            return LifeCaseType.APPOINTMENT_CYCLE;
+        }
+
+        @Override
+        protected void configureCase(CaseDefinition definition) {
+            definition.getWorkers().add(agentWorker("test-cap", "Test prompt", Map.class));
         }
     }
 }
@@ -155,8 +226,7 @@ public abstract class LifeTypedCaseHub extends YamlCaseHub {
                 agent.agentId(), descriptorFactory.descriptorFor(agent)));
     }
 
-    protected void configureCase(CaseDefinition definition) {
-    }
+    protected abstract void configureCase(CaseDefinition definition);
 
     protected Worker agentWorker(String capabilityName, String systemPrompt,
                                   Class<?> responseSchema) {
@@ -291,10 +361,11 @@ Stage: `LifeTypedCaseHub.java`, `LifeTypedCaseHubTest.java`, all 7 migrated Case
 
 ---
 
-### Task 3: Update protocol + commit
+### Task 3: Update protocol + ARC42STORIES.MD + commit
 
 **Files:**
 - Modify: `docs/protocols/casehub-life/openclaw-agent-worker-pattern.md`
+- Modify: `ARC42STORIES.MD`
 
 **Interfaces:**
 - Consumes: None (documentation only)
@@ -308,10 +379,16 @@ Four changes:
 3. Document template method contract: subclasses override `configureCase()`, not `augment()`
 4. Document manual Agent construction for the `userMessage` exception case
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 2: Update ARC42STORIES.MD pattern anchor**
+
+Update the §Pattern anchor and §Pattern introduced sections to reflect the new extension point:
+1. Replace `TravelPlanCaseHub#getDefinition()` with `TravelPlanCaseHub#configureCase()` — YAML + DSL augmentation via template method hook
+2. Update the narrative in §Pattern introduced from "DSL companion with `getDefinition()` override" to "DSL companion with `configureCase()` override via `LifeTypedCaseHub`"
+
+- [ ] **Step 3: Commit**
 
 ```
-docs(#47): update openclaw-agent-worker-pattern for LifeTypedCaseHub migration
+docs(#47): update openclaw-agent-worker-pattern and ARC42STORIES.MD for LifeTypedCaseHub migration
 ```
 
 ---
@@ -320,7 +397,7 @@ docs(#47): update openclaw-agent-worker-pattern for LifeTypedCaseHub migration
 
 1. `JAVA_HOME=$(/usr/libexec/java_home -v 26) mvn --batch-mode install` — full build passes
 2. All existing CaseHub tests pass (definition loads, workers present, capabilities correct, bindings correct)
-3. New `LifeTypedCaseHubTest` passes (agentWorker name/capability, lifeCaseType, agent getter)
+3. New `LifeTypedCaseHubTest` passes (agentWorker name/capability, lifeCaseType, agent getter, template method ordering, workers+descriptors together, agent passed to factories)
 4. `FamilyVoteCaseHub` unchanged and its tests still pass
 5. No references to `cap()`, `capabilities(List<Capability>)`, or `volatile CaseDefinition augmentedDefinition` remain in any CaseHub
 6. No CaseHub overrides `getDefinition()` (compiler enforces — it's `final`)
