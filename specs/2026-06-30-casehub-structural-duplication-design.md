@@ -138,6 +138,55 @@ All other workers in that CaseHub use `agentWorker()`.
 
 **CareEpisodeCaseHub** — stays on `YamlCaseHub` directly. Has no `LifeCaseType` (spawned as sub-case by care-coordination, not resolved by `LifeCaseService`). Overrides `augment(CaseDefinition)` on `YamlCaseHub` directly to add its 2 workers and register descriptors. Fixes both compilation breaks (removes `getDefinition()` override, replaces `cap()` with `capabilityName(String)`). Retains its own `@Inject` fields — the duplication is 2 fields for 1 class, not worth a shared base class.
 
+```java
+@ApplicationScoped
+public class CareEpisodeCaseHub extends YamlCaseHub {
+
+    private static final LifeAgent AGENT = LifeAgent.HEALTH;
+
+    @Inject
+    LifeOpenClawChatModelFactory openClawFactory;
+
+    @Inject
+    LifeAgentDescriptorFactory descriptorFactory;
+
+    public CareEpisodeCaseHub() {
+        super("life/care-episode.yaml");
+    }
+
+    @Override
+    protected void augment(CaseDefinition definition) {
+        Agent assessAgent = Agent.builder()
+            .model(openClawFactory.forAgent(AGENT))
+            .systemPrompt("...")
+            .responseSchema(AssessPatientResult.class)
+            .build();
+        Agent careAgent = Agent.builder()
+            .model(openClawFactory.forAgent(AGENT))
+            .systemPrompt("...")
+            .responseSchema(ProvideCareResult.class)
+            .build();
+
+        definition.getWorkers().addAll(List.of(
+            Worker.builder()
+                .name("assess-patient-agent")
+                .capabilityName("assess-patient")
+                .function(new AgentWorkerFunction(assessAgent))
+                .build(),
+            Worker.builder()
+                .name("provide-care-agent")
+                .capabilityName("provide-care")
+                .function(new AgentWorkerFunction(careAgent))
+                .build()
+        ));
+        definition.setAgentDescriptors(Map.of(
+            AGENT.agentId(), descriptorFactory.descriptorFor(AGENT)));
+    }
+}
+```
+
+No `agentWorker()` convenience method — `CareEpisodeCaseHub` does not inherit from `LifeTypedCaseHub`. Worker construction uses `capabilityName(String)` (new API) and `AgentWorkerFunction` directly. Descriptor registration matches `LifeTypedCaseHub.augment()` exactly.
+
 The prior business-logic-centralization spec (life#27) also excluded CareEpisodeCaseHub from `LifeTypedCaseHub` for the same reason: sub-case hubs have no `LifeCaseType` and must not appear in `Instance<LifeTypedCaseHub>` used for case resolution.
 
 **FamilyVoteCaseHub** — unchanged. Stays on `YamlCaseHub` directly (no augmentation, no agent).
@@ -155,6 +204,7 @@ The prior business-logic-centralization spec (life#27) also excluded CareEpisode
 | `TravelPlanCaseHub` | Extend LifeTypedCaseHub, keeps SubCase bindings |
 | `CareEpisodeCaseHub` | Stays on YamlCaseHub; fix compilation breaks (`getDefinition()` override removed, `cap()` replaced with `capabilityName(String)`), own `augment()` override |
 | `FamilyVoteCaseHub` | Unchanged |
+| `LifeCaseService` | **NOT changed.** Switch on `LifeCaseType` and 6 individual `@Inject` CaseHub fields remain. Switch elimination to `Instance<LifeTypedCaseHub>` deferred to life#27 — this spec adds `lifeCaseType()` to prepare for it but does not refactor the service |
 | `openclaw-agent-worker-pattern.md` | Update: individual per-worker construction examples become `LifeTypedCaseHub.agentWorker()` reference for the standard case; `cap()` helper removed; `capabilityName(String)` replaces `capabilities(List<Capability>)`; manual Agent construction documented for `userMessage` exception case; template method contract (`configureCase()`, not `augment()`) documented |
 
 ## Testing
