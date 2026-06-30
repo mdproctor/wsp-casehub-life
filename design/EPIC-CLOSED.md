@@ -1,5 +1,5 @@
-# Branch Closed: issue-36-fix-caseruntime-signal
+# Branch Closed: issue-47-casehub-duplication
 
-**Date:** 2026-06-19
-**Issues:** 36
+**Date:** 2026-06-30
+**Issues:** 47
 **Status:** merged to main
