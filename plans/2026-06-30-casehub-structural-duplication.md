@@ -44,9 +44,13 @@ package io.casehub.life.app.engine;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.langchain4j.model.chat.ChatModel;
 import io.casehub.api.model.AgentWorkerFunction;
+import io.casehub.api.model.CaseDefinition;
 import io.casehub.api.model.ai.ChatModelProvider;
 import io.casehub.life.api.LifeCaseType;
 import io.casehub.life.app.engine.agent.LifeAgentDescriptorFactory;
@@ -64,7 +68,9 @@ class LifeTypedCaseHubTest {
     @BeforeEach
     void setUp() {
         mockFactory = mock(LifeOpenClawChatModelFactory.class);
-        when(mockFactory.forAgent(any())).thenReturn(mock(ChatModelProvider.class));
+        var mockProvider = mock(ChatModelProvider.class);
+        when(mockProvider.get()).thenReturn(mock(ChatModel.class));
+        when(mockFactory.forAgent(any())).thenReturn(mockProvider);
         mockDescriptorFactory = mock(LifeAgentDescriptorFactory.class);
         when(mockDescriptorFactory.descriptorFor(any()))
                 .thenReturn(mock(io.casehub.eidos.api.AgentDescriptor.class));
@@ -123,7 +129,7 @@ class LifeTypedCaseHubTest {
         when(definition.getWorkers()).thenReturn(new java.util.ArrayList<>());
         hub.augment(definition);
 
-        verify(mockFactory, org.mockito.Mockito.never()).forAgent(any());
+        verify(mockFactory, never()).forAgent(any());
         verify(mockDescriptorFactory).descriptorFor(LifeAgent.HEALTH);
     }
 
