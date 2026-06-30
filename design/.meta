@@ -1,0 +1,9 @@
+branch: issue-48-jurisdiction-gdpr-refine
+project-sha: de2c4fad359a772d8af2ece35a12039d3694de1f
+date: 2026-06-30
+issue: 48
+issue-repo: casehubio/life
+covers: 48,50,51,49
+flyway-next-v: unknown
+design-repo: project
+design-section-hashes: 4d2cc5ab:## §1 Introduction and Goals|4f6b26ef:## §2 Constraints|39b76cb9:## §3 Context and Scope|74aa736f:## §4 Solution Strategy|9ca8de62:## §5 Building Block View|f1938c56:## §6 Runtime View|65807a21:## §7 Deployment View|a03d508f:## §8 Crosscutting Concepts|2c5aabec:## §9.1 Journey Overview|a1061f74:## §9.2 Chapter Index|a0cb0188:## §9.3 Chapter Entries|c9a966ad:## §9.4 Layer Entries|598f3a04:## §10 Architectural Decisions|1f604475:## §11 Quality Requirements|af5f260f:## §12 Risks and Technical Debt|42d51385:## §13 Glossary|faa654d9:## Arc42Stories Self-Assessment
