@@ -2,6 +2,7 @@
 
 | File | Date | Title |
 |------|------|-------|
+| [2026-06-30-mdp01-duplication-points-upward.md](2026-06-30-mdp01-duplication-points-upward.md) | 2026-06-30 | When Duplication Points Upward |
 | [2026-06-29-mdp01-memory-gap-gdpr-erasure.md](2026-06-29-mdp01-memory-gap-gdpr-erasure.md) | 2026-06-29 | The Memory Gap in GDPR Erasure |
 | [2026-06-19-mdp01-snapshot-already-moved.md](2026-06-19-mdp01-snapshot-already-moved.md) | 2026-06-19 | The snapshot had already moved |
 | [2026-06-16-mdp02-closing-layer-6.md](2026-06-16-mdp02-closing-layer-6.md) | 2026-06-16 | Closing Layer 6 — or: the bugs you find when you actually look |
