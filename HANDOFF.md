@@ -1,3 +1,5 @@
+*Updated: parent#333 closed — removed from backlog.*
+
 # Handoff — 2026-06-30
 
 Closed #47 (structural CaseHub duplication). Created `LifeTypedCaseHub` abstract base with template method (`augment()` final, `configureCase()` abstract), `agentWorker()` helper, `lifeCaseType()` abstract. 6 CaseHubs migrated; CareEpisodeCaseHub fixed separately on YamlCaseHub. Net -500 lines across 18 files. Protocol and ARC42STORIES.MD updated. Filed parent#333 for casehub-life.md doc sync.
@@ -15,7 +17,6 @@ Pick up life#51 (LifeCaseService switch elimination via `Instance<LifeTypedCaseH
 - life#48 — per-action jurisdiction on LegalActionLedgerEntry · S · Med
 - life#49 — LedgerErasureService tokenisation-based ledger actorId erasure · M · Med
 - life#50 — compliance report with memoryRecordsErased in GDPR summary · S · Low
-- parent#333 — update casehub-life.md for LifeTypedCaseHub migration · XS · Low
 - (to file on engine) — add timer sentry type for periodic binding evaluation
 - (to file on engine) — extend bridge to route STATUS messages
 - (to file on openclaw) — OpenClawAgentRegistry 1:N support
