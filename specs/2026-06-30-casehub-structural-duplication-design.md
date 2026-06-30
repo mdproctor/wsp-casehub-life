@@ -42,9 +42,7 @@ protected final void augment(CaseDefinition definition) {
         agent.agentId(), descriptorFactory.descriptorFor(agent)));
 }
 
-protected void configureCase(CaseDefinition definition) {
-    // Default no-op. Subclasses override to add workers and bindings.
-}
+protected abstract void configureCase(CaseDefinition definition);
 ```
 
 Making `augment()` final in `LifeTypedCaseHub` also prevents re-introduction of the double-checked lock pattern that engine#591 was designed to eliminate.
