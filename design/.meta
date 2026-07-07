@@ -1,0 +1,9 @@
+branch: issue-52-cbr-adaptive-life
+project-sha: 132e107b0c6e392a81c0ab58ad26a8f1fbc5b702
+date: 2026-07-07
+issue: 52
+issue-repo: casehubio/life
+covers: 52,53,54,55,56,57
+flyway-next-v: unknown
+design-repo: project
+design-section-hashes: 4d2cc5ab:## §1 Introduction and Goals|4f6b26ef:## §2 Constraints|39b76cb9:## §3 Context and Scope|74aa736f:## §4 Solution Strategy|9ca8de62:## §5 Building Block View|f1938c56:## §6 Runtime View|65807a21:## §7 Deployment View|a03d508f:## §8 Crosscutting Concepts|2c5aabec:## §9.1 Journey Overview|a1061f74:## §9.2 Chapter Index|a0cb0188:## §9.3 Chapter Entries|c9a966ad:## §9.4 Layer Entries|598f3a04:## §10 Architectural Decisions|1f604475:## §11 Quality Requirements|af5f260f:## §12 Risks and Technical Debt|42d51385:## §13 Glossary|faa654d9:## Arc42Stories Self-Assessment
