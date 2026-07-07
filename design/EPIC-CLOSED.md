@@ -1,5 +1,5 @@
-# Branch Closed: issue-36-fix-caseruntime-signal
+# Branch Closed: issue-8-layer7-completion
 
-**Date:** 2026-06-19
-**Issues:** 36
+**Date:** 2026-07-07
+**Issues:** 61
 **Status:** merged to main
