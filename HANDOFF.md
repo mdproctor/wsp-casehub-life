@@ -1,5 +1,7 @@
 # Handoff — 2026-07-10
 
+*Updated: engine#661 closed — removed from backlog.*
+
 Closed #53 (CBR case base schema — feature schemas, description providers, YAML configs), #57 (retention pipeline — LifeCaseOutcomeCbrWriter + LifeRoutingOutcomeRecorder). Filed engine#682 (closed as dup of #477), engine#683 (RoutingPromptSection promotion). Closed #54 (absorbed into #53 — similarity engine provided by neocortex). Design review: 3 rounds, 16 issues, $12. Forage: GE-20260710-31b535 (jsonschema2pojo enum kebab-case).
 
 ## Last Session
@@ -19,7 +21,6 @@ Pick up next work. Epic #52 stays open — #55 (REVISE/adaptation) deferred, #56
 ## What's Left
 
 - engine#660 — timer sentry type for periodic binding evaluation
-- engine#661 — extend bridge to route STATUS messages
 - openclaw#63 — OpenClawAgentRegistry 1:N support
 
 ## What's Next
