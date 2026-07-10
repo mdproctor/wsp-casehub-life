@@ -1,16 +1,20 @@
-*Updated: parent#351 closed — removed from backlog.*
+# Handoff — 2026-07-10
 
-# Handoff — 2026-07-07
-
-Closed #61 (ChannelContextProvider), #59 (upstream SNAPSHOT — category→types, qhorus CDI, flaky test). Filed #60 (skill integration, blocked openclaw Epic 4), engine#660 (timer sentry), engine#661 (STATUS bridge), openclaw#63 (1:N registry). Closed #58 (duplicate of #59). Forage: GE-20260707-802a18 (GitHub Packages updated_at gotcha).
+Closed #53 (CBR case base schema — feature schemas, description providers, YAML configs), #57 (retention pipeline — LifeCaseOutcomeCbrWriter + LifeRoutingOutcomeRecorder). Filed engine#682 (closed as dup of #477), engine#683 (RoutingPromptSection promotion). Closed #54 (absorbed into #53 — similarity engine provided by neocortex). Design review: 3 rounds, 16 issues, $12. Forage: GE-20260710-31b535 (jsonschema2pojo enum kebab-case).
 
 ## Last Session
 
-Two branches in one session. #59 landed first (upstream SNAPSHOT consumption — category→types migration, qhorus exclusion removal, flaky test fix via Awaitility). Then #61: ChannelContextProvider designed (adversarial review, 3 rounds, $13), implemented (TDD, 4 tasks), and landed. Also hit and fixed an OpenClawAgentProvider constructor break (new deliveryToken parameter).
+CBR epic (#52) brainstormed, designed, reviewed, and implemented. Foundation was far more mature than expected — neocortex already had CbrCaseMemoryStore with adapters, CbrSimilarityScorer, and the engine had CbrRetrievalService, CaseOutcomeObserver, RoutingOutcomeRecorder. Life built the domain-specific parts: 6 description providers, 2 retention writers (per-case + per-routing-decision), feature schema registrar with CategoricalTable/GaussianDecay specs, and CbrConfig on all 6 YAML case definitions.
 
 ## Immediate Next Step
 
-Pick up next work from the backlog. CBR epic (#52) is the large new direction; #53 (case base schema) is the entry point. #8 stays open for skill integration (#60, blocked on openclaw Epic 4).
+Pick up next work. Epic #52 stays open — #55 (REVISE/adaptation) deferred, #56 (engine integration) blocked on engine#505/#683. The CBR store accumulates data but routing strategies don't read it yet.
+
+## Cross-Module
+
+**Blocked by:**
+- engine#505 — routing strategy consumes CBR experiences · M · Med
+- engine#683 — RoutingPromptSection promotion to engine-api · M · Med
 
 ## What's Left
 
@@ -22,12 +26,13 @@ Pick up next work from the backlog. CBR epic (#52) is the large new direction; #
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #52 | CBR epic — Case-Based Reasoning for adaptive life automation | XL | High | Entry point: #53 |
-| #53 | CBR case base schema and construction | M | High | First CBR issue — no deps |
+| #55 | CBR domain adaptation rules (REVISE step) | M | High | Deferred — no foundation SPI |
+| #56 | CBR engine integration — wire suggestions into execution | M | Med | Blocked on engine#505, #683 |
 | #60 | OpenClaw skill integration (banking, calendar, Home Assistant, messaging) | L | High | Blocked on openclaw Epic 4 |
 
 ## References
 
-- Spec: `docs/specs/2026-07-07-layer7-completion-design.md`
-- Blog: `blog/2026-07-07-mdp01-agents-need-eyes-not-just-ears.md`
-- Garden: GE-20260707-802a18 (GitHub Packages updated_at gotcha)
+- Spec: `docs/specs/2026-07-09-cbr-adaptive-life-design.md`
+- Blog: `blog/2026-07-10-mdp01-cbr-the-foundation-was-already-there.md`
+- Garden: GE-20260710-31b535 (jsonschema2pojo enum kebab-case)
+- Review: `~/adr/casehub-life/cbr-adaptive-life-20260709-164720/`
