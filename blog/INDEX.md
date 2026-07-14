@@ -2,6 +2,7 @@
 
 | File | Date | Title |
 |------|------|-------|
+| [2026-07-14-mdp01-the-last-mile-was-the-whole-point.md](2026-07-14-mdp01-the-last-mile-was-the-whole-point.md) | 2026-07-14 | The Last Mile Was the Whole Point |
 | [2026-07-05-mdp01-foundation-moves-under-your-feet.md](2026-07-05-mdp01-foundation-moves-under-your-feet.md) | 2026-07-05 | The Foundation Moves Under Your Feet |
 | [2026-06-30-mdp01-duplication-points-upward.md](2026-06-30-mdp01-duplication-points-upward.md) | 2026-06-30 | When Duplication Points Upward |
 | [2026-06-29-mdp01-memory-gap-gdpr-erasure.md](2026-06-29-mdp01-memory-gap-gdpr-erasure.md) | 2026-06-29 | The Memory Gap in GDPR Erasure |
