@@ -1,5 +1,5 @@
-# Branch Closed: issue-36-fix-caseruntime-signal
+# Branch Closed: issue-55-cbr-adaptation-rules
 
-**Date:** 2026-06-19
-**Issues:** 36
+**Date:** 2026-07-16
+**Issues:** 55
 **Status:** merged to main
