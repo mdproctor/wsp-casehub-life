@@ -1,35 +1,28 @@
 # Handoff — 2026-07-16
 
-Closed #55 (CBR domain adaptation rules). 6 per-domain LifeAdaptationRule impls + LifePlanAdapter displacing NoOpPlanAdapter. Design reviewed (4 rounds, 18 issues, $15.42). Code reviewed (4 rounds, 17 issues, $14.41). Blog: adaptation-is-where-domain-knowledge-lives. Filed engine#738 (PlanAdapter wiring), life#66 (FeatureStatistics upstream), life#67 (trust-aware adaptation), life#68-70 (code review deferred items).
+Closed #67 (trust-score-aware CBR adaptation), #70 (LifeCaseService CBR integration test), #66 (upstream to neocortex#157), #68 (design correct), #69 (behavior correct). Layer 8 CBR now complete through trust-aware adaptation. Blog: trust-scores-meet-cbr-adaptation.
 
 ## Last Session
 
-CBR adaptation rules (#55) — brainstormed, designed, reviewed, implemented, code-reviewed. Composite LifePlanAdapter (@Alternative) dispatches to 6 per-domain rules (contractor, home-maintenance, health, appointment-cycle, financial, travel). Each rule is a pure function on feature deltas (season, budget, severity, escalation patterns). SeverityScaling shared helper. LifeCbrRetrievalResult + retrieveForAdaptation() splits adaptation (≥1 case) from statistics (≥2). CbrInputTransformer enhanced to format adapted plan alongside raw experiences. AdaptationTrace fired as CDI event.
+CBR follow-up batch — 5 issues on one branch. Three evaluation issues closed with rationale (no code): #66 upstream move filed as neocortex#157, #68 providerId vs providerType design confirmed correct, #69 empty AdaptationTrace firing confirmed correct. Two implemented: LifeTrustFeatureEnricher enriches CBR feature map with actor trust scores from TrustGateService before adaptation; 4 rules (Contractor, Health, AppointmentCycle, HomeMaintenance) gain trust-aware logic. LifeCaseServiceCbrTest covers the full CBR orchestration path.
 
 ## Immediate Next Step
 
-Pick up next work. Remaining issues (#60, #66, #67, #68, #69, #70) are mostly small or blocked. engine#738 tracks PlanAdapter wiring upstream.
+No open issues in the current batch. Pick up new work — remaining open issues are #60 (OpenClaw skill integration, L/High, blocked on openclaw Epic 4) and engine#738 (PlanAdapter wiring upstream).
 
 ## What's Left
 
-- Pre-existing test failures: CareCoordinationCaseHubTest (Expression wrapper), integration tests (SNAPSHOT tenant compat) — still unfiled
+- Pre-existing: Quarkus augmentation build failure (35 CDI errors — engine SNAPSHOT CrossTenantProducer compat) — still unfiled
+- Pre-existing: CareCoordinationCaseHubTest (Expression wrapper), integration tests (SNAPSHOT tenant compat) — still unfiled
 - engine#738 — PlanAdapter wiring into CbrRetrievalService · M · Med
+- neocortex#157 — FeatureStatistics upstream move · XS · Low
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #66 | Move FeatureStatistics upstream to neocortex-memory-api | XS | Low | |
-| #67 | Trust-score-aware adaptation | S | Med | Augment currentFeatures with trust scores |
-| #68 | Evaluate providerId vs providerType/careType | XS | Low | Deferred from code review |
-| #69 | Evaluate AdaptationTrace firing for empty adaptations | XS | Low | Deferred from code review |
-| #70 | End-to-end LifeCaseService integration test | S | Med | |
 | #60 | OpenClaw skill integration | L | High | Blocked on openclaw Epic 4 |
 
 ## References
 
-- Spec: `docs/specs/2026-07-14-cbr-adaptation-rules-design.md`
-- Blog: `blog/2026-07-16-mdp01-adaptation-is-where-domain-knowledge-lives.md`
-- Review (spec): `~/adr/casehub-life/cbr-adaptation-rules-20260714-195035/`
-- Review (code): `~/adr/casehub-life/cbr-adaptation-rules-code-20260716-125410/`
-- Plan: `plans/attic/2026-07-14-cbr-adaptation-rules.md`
+- Blog: `blog/2026-07-16-mdp02-trust-scores-meet-cbr-adaptation.md`
