@@ -1,21 +1,21 @@
-# Handoff — 2026-07-16
+# Handoff — 2026-07-17
 
-Closed #67 (trust-score-aware CBR adaptation), #70 (LifeCaseService CBR integration test), #66 (upstream to neocortex#157), #68 (design correct), #69 (behavior correct). Layer 8 CBR now complete through trust-aware adaptation. Blog: trust-scores-meet-cbr-adaptation.
+Closed #71 (CareCoordinationCaseHubTest Expression wrapper), #72 (CbrCaseMemoryStore signature + blocking IO). Filed engine#745 (worker output not propagated — HomeMaintenance/TravelPlan integration tests). 35 CDI errors from previous handover resolved by engine SNAPSHOT update — no action needed.
 
 ## Last Session
 
-CBR follow-up batch — 5 issues on one branch. Three evaluation issues closed with rationale (no code): #66 upstream move filed as neocortex#157, #68 providerId vs providerType design confirmed correct, #69 empty AdaptationTrace firing confirmed correct. Two implemented: LifeTrustFeatureEnricher enriches CBR feature map with actor trust scores from TrustGateService before adaptation; 4 rules (Contractor, Health, AppointmentCycle, HomeMaintenance) gain trust-aware logic. LifeCaseServiceCbrTest covers the full CBR orchestration path.
+SNAPSHOT compat fix branch — adapted to neocortex and engine API changes. CbrCaseMemoryStore.store() gained 7th Path param, CbrQuery.of() gained 3rd Path param — updated all callers (LifeCaseOutcomeCbrWriter, LifeRoutingOutcomeRecorder, LifeCbrSuggestionService) and test mocks. Fixed LifeRoutingOutcomeRecorder blocking IO (.emitOn → .runSubscriptionOn). Fixed CareCoordinationCaseHubTest SubCaseMapping.Expression pattern match. FinancialReviewIntegrationTest now passes; HomeMaintenance + TravelPlan are engine regressions.
 
 ## Immediate Next Step
 
-No open issues in the current batch. Pick up new work — remaining open issues are #60 (OpenClaw skill integration, L/High, blocked on openclaw Epic 4) and engine#738 (PlanAdapter wiring upstream).
+No open issues in the current batch. Remaining open issues are #60 (OpenClaw skill integration, L/High, blocked on openclaw Epic 4) and engine#738 (PlanAdapter wiring upstream). engine#745 blocks HomeMaintenance/TravelPlan integration tests.
 
 ## What's Left
 
-- Pre-existing: Quarkus augmentation build failure (35 CDI errors — engine SNAPSHOT CrossTenantProducer compat) — still unfiled
-- Pre-existing: CareCoordinationCaseHubTest (Expression wrapper), integration tests (SNAPSHOT tenant compat) — still unfiled
+- engine#745 — worker output not propagated to case context (blocks 2 integration tests) · M · Med
 - engine#738 — PlanAdapter wiring into CbrRetrievalService · M · Med
 - neocortex#157 — FeatureStatistics upstream move · XS · Low
+- LifeTaskResourceTest.createLifeTask_withPastDeadline — SLA breach escalation candidateGroups wrong (household-member vs household-admin) — unfiled · S · Med
 
 ## What's Next
 
