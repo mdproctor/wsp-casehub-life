@@ -1,18 +1,17 @@
 # Handoff — 2026-07-17
 
-Closed #71 (CareCoordinationCaseHubTest Expression wrapper), #72 (CbrCaseMemoryStore signature + blocking IO). Filed engine#745 (worker output not propagated — HomeMaintenance/TravelPlan integration tests). 35 CDI errors from previous handover resolved by engine SNAPSHOT update — no action needed.
+Closed #71 (CareCoordinationCaseHubTest Expression wrapper), #72 (CbrCaseMemoryStore signature + blocking IO). engine#745 (worker output not propagated) filed and resolved same day — all integration tests green.
 
 ## Last Session
 
-SNAPSHOT compat fix branch — adapted to neocortex and engine API changes. CbrCaseMemoryStore.store() gained 7th Path param, CbrQuery.of() gained 3rd Path param — updated all callers (LifeCaseOutcomeCbrWriter, LifeRoutingOutcomeRecorder, LifeCbrSuggestionService) and test mocks. Fixed LifeRoutingOutcomeRecorder blocking IO (.emitOn → .runSubscriptionOn). Fixed CareCoordinationCaseHubTest SubCaseMapping.Expression pattern match. FinancialReviewIntegrationTest now passes; HomeMaintenance + TravelPlan are engine regressions.
+SNAPSHOT compat fix branch — adapted to neocortex and engine API changes. CbrCaseMemoryStore.store() gained 7th Path param, CbrQuery.of() gained 3rd Path param — updated all callers and test mocks. Fixed LifeRoutingOutcomeRecorder blocking IO (.emitOn → .runSubscriptionOn). Fixed CareCoordinationCaseHubTest SubCaseMapping.Expression pattern match. All integration tests pass after engine#745 fix.
 
 ## Immediate Next Step
 
-No open issues in the current batch. Remaining open issues are #60 (OpenClaw skill integration, L/High, blocked on openclaw Epic 4) and engine#738 (PlanAdapter wiring upstream). engine#745 blocks HomeMaintenance/TravelPlan integration tests.
+No open issues in the current batch. Remaining open issues are #60 (OpenClaw skill integration, L/High, blocked on openclaw Epic 4) and engine#738 (PlanAdapter wiring upstream).
 
 ## What's Left
 
-- engine#745 — worker output not propagated to case context (blocks 2 integration tests) · M · Med
 - engine#738 — PlanAdapter wiring into CbrRetrievalService · M · Med
 - neocortex#157 — FeatureStatistics upstream move · XS · Low
 - LifeTaskResourceTest.createLifeTask_withPastDeadline — SLA breach escalation candidateGroups wrong (household-member vs household-admin) — unfiled · S · Med
