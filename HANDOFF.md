@@ -1,10 +1,10 @@
-# Handoff — 2026-07-17
+# Handoff — 2026-07-18
 
-Closed #71 (CareCoordinationCaseHubTest Expression wrapper), #72 (CbrCaseMemoryStore signature + blocking IO). engine#745 (worker output not propagated) filed and resolved same day — all integration tests green.
+Closed #73 (SLA breach escalation candidateGroups). Root cause: `casehub.work.sla.breach-policy` defaulted to `"no-op"` — `LifeSlaBreachPolicy` existed since Layer 2 but was never activated. Also fixed test to call `ExpiryLifecycleService.expireItem()` directly (Quartz timer race with transaction commit). Two garden entries submitted (GE-20260718-2fb8eb, GE-20260718-2dc0bc).
 
 ## Last Session
 
-SNAPSHOT compat fix branch — adapted to neocortex and engine API changes. CbrCaseMemoryStore.store() gained 7th Path param, CbrQuery.of() gained 3rd Path param — updated all callers and test mocks. Fixed LifeRoutingOutcomeRecorder blocking IO (.emitOn → .runSubscriptionOn). Fixed CareCoordinationCaseHubTest SubCaseMapping.Expression pattern match. All integration tests pass after engine#745 fix.
+Config-only fix branch — single issue, two root causes. Added `casehub.work.sla.breach-policy=life-sla-breach` to both application.properties files. Replaced async Awaitility test with deterministic direct `ExpiryLifecycleService` call. CLAUDE.md updated with SLA breach policy config documentation.
 
 ## Immediate Next Step
 
@@ -14,7 +14,6 @@ No open issues in the current batch. Remaining open issues are #60 (OpenClaw ski
 
 - engine#738 — PlanAdapter wiring into CbrRetrievalService · M · Med
 - neocortex#157 — FeatureStatistics upstream move · XS · Low
-- LifeTaskResourceTest.createLifeTask_withPastDeadline — SLA breach escalation candidateGroups wrong (household-member vs household-admin) — unfiled · S · Med
 
 ## What's Next
 
@@ -24,4 +23,4 @@ No open issues in the current batch. Remaining open issues are #60 (OpenClaw ski
 
 ## References
 
-- Blog: `blog/2026-07-16-mdp02-trust-scores-meet-cbr-adaptation.md`
+- Garden: GE-20260718-2fb8eb (StrategyResolver silent no-op), GE-20260718-2dc0bc (Quartz timer race)
