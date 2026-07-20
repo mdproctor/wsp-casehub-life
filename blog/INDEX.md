@@ -2,6 +2,8 @@
 
 | File | Date | Title |
 |------|------|-------|
+| [2026-07-20-mdp01-frontend-without-npm-publish.md](2026-07-20-mdp01-frontend-without-npm-publish.md) | 2026-07-20 | The frontend that didn't need npm publish |
+| [2026-07-19-mdp03-household-hub.md](2026-07-19-mdp03-household-hub.md) | 2026-07-19 | Household Hub — from accountability engine to something people actually use |
 | [2026-07-16-mdp02-trust-scores-meet-cbr-adaptation.md](2026-07-16-mdp02-trust-scores-meet-cbr-adaptation.md) | 2026-07-16 | Trust Scores Meet CBR Adaptation |
 | [2026-07-14-mdp01-the-last-mile-was-the-whole-point.md](2026-07-14-mdp01-the-last-mile-was-the-whole-point.md) | 2026-07-14 | The Last Mile Was the Whole Point |
 | [2026-07-05-mdp01-foundation-moves-under-your-feet.md](2026-07-05-mdp01-foundation-moves-under-your-feet.md) | 2026-07-05 | The Foundation Moves Under Your Feet |
