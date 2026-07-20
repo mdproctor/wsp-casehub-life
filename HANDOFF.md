@@ -1,26 +1,30 @@
-# Handoff — 2026-07-19
+# Handoff — 2026-07-20
 
-Branch `issue-74-household-hub-phase1` open for #74 (Household Hub Phase 1 MVP). Backend Tasks 1-4 complete (5 commits). Task 5 (life-ui frontend) deferred — needs blocks-ui package availability investigation. Closed #52 (CBR epic) after engine#738 landed. Design spec reviewed (3 rounds, 19 issues resolved). GE-20260719-4e2784 submitted (FixedCurrentPrincipal.groups() gotcha).
+Closed #74 (Household Hub UI — Phase 1 MVP). Branch squashed 14 → 6 commits, pushed to both fork and upstream. Two blog entries published.
 
-## Immediate Next Step
+## Last Session
 
-Resume branch `issue-74-household-hub-phase1`. Before implementing Task 5 (life-ui): verify `@casehubio/blocks-ui-*` packages are published to GitHub Packages (`npm view @casehubio/blocks-ui-core`). If not published, coordinate with blocks-ui repo. Then read blocks-ui component APIs (endpoint attributes, DataSourceMixin patterns) before writing the compositions.
+Completed Task 5 (life-ui module + Quinoa integration) and Task 6 (blocks-ui #56 status update + issue tracking). Fixed LifeAnalyticsTest.seedTracker() — domain field was NOT NULL since V111 but test helper didn't set it. Added JuniorLifeCaseVisibilityPolicy to production selected-alternatives. Code review clean (0 CRITICAL, 1 WARNING deferred to #75).
+
+Frontend uses Vite aliases to resolve @casehubio/blocks-ui-* and @casehubio/pages-* from sibling repos — no npm publish required. 209 modules, ~400KB bundle. Quinoa 2.8.3 serves the SPA from Quarkus (dev/demo profiles only).
 
 ## What's Left
 
-- Task 5: life-ui module setup + app shell + dashboard + inbox views · L · Med (blocks-ui package availability is the gate)
-- CLAUDE.md `What This Project Owns` section needs Layer 9 / Household Hub additions once frontend lands · S · Low
-- ARC42STORIES.MD needs Phase 1 chapter entry once complete · S · Low
+- #75 — LifeCaseQueryService totalCount includes visibility-filtered items (XS/Low)
+- #60 — OpenClaw skill integration (L/High, blocked on openclaw Epic 4)
+- Pre-existing: `mvn install` and `quarkus:dev` fail with CDI validation errors — engine reactive handlers (ReactiveEventLogRepository, ReactiveCaseInstanceRepository) need alternatives in production config. Tests pass; compile passes.
+- Pre-existing: 4 test failures — AppointmentCycleCaseDefinitionsTest, TravelPlanCaseDefinitionsTest (StandardGoalKind vs String), FamilyVoteCaseHubTest, FamilyVoteCaseDefinitionsTest.
+- parent#378 — docs/repos/casehub-life.md needs life-ui module section.
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
+| #75 | LifeCaseQueryService totalCount fix | XS | Low | Pagination count includes filtered items |
 | #60 | OpenClaw skill integration | L | High | Blocked on openclaw Epic 4 |
 
 ## References
 
-- Spec: `docs/specs/2026-07-19-household-hub-ui-design.md`
-- Plan: `plans/2026-07-19-household-hub-phase1.md`
-- Design review: `~/adr/casehub-life/household-hub-ui-20260719-015318/tracker.md`
-- Garden: GE-20260719-4e2784 (FixedCurrentPrincipal.groups() silent failure)
+- Garden: GE-20260720-f1ce81 (Quinoa package-manager-install gotcha), GE-20260720-9c817e (Vite cross-repo alias technique)
+- Spec: docs/specs/2026-07-19-household-hub-ui-design.md
+- Blog: 2026-07-19-mdp03-household-hub.md, 2026-07-20-mdp01-frontend-without-npm-publish.md
