@@ -1,3 +1,5 @@
+*Updated: #77 closed — removed from What's Left.*
+
 # Handoff — 2026-07-26
 
 Closed #60 (OpenClaw skill integration) and #77 (engine + platform SNAPSHOT API adaptation). Single squashed commit 9b0210e on main.
@@ -8,7 +10,6 @@ Two-tier skill model (NATIVE/OPENCLAW) for external service integration. All 32 
 
 ## What's Left
 
-- Pre-existing: CDI `ReactiveAgentIdentityVerificationService` UnsatisfiedResolutionException blocks @QuarkusTest — new platform-identity dependency needed. Tracked on #77.
 - parent#378 — docs/repos/casehub-life.md needs life-ui module section · S · Low
 
 ## Cross-Module
