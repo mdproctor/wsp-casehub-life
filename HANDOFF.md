@@ -1,22 +1,28 @@
-# Handoff — 2026-07-21
+# Handoff — 2026-07-26
 
-Closed #75 (visibility-filtered totalCount) and #76 (engine SNAPSHOT API adaptation — already fixed on main). One commit, two files.
+Closed #60 (OpenClaw skill integration) and #77 (engine + platform SNAPSHOT API adaptation). Single squashed commit 9b0210e on main.
 
 ## Last Session
 
-Fixed LifeCaseQueryService.listCases() — totalCount was computed from the database before visibility filtering, so junior users saw totalCount=3 with an empty items list. Now queries all matching trackers, applies visibility filter, then paginates from the filtered list. Confirmed #76 was already resolved by commit 50dfa43.
+Two-tier skill model (NATIVE/OPENCLAW) for external service integration. All 32 worker prompts and 7 sentinel prompts upgraded to tool-aware — reference calendar_create_event, iot_get_state, bank_get_transactions, send_chat. 39 response schemas gain tool-derived fields and toolsUsed. Design spec adversarially reviewed (4 rounds, 14 issues). Fixed pre-existing SNAPSHOT API breaks: SettingsScope.of→Path, WorkerExecutionContext removed (engine#693), WorkerFunction<T,R> two-param.
 
 ## What's Left
 
-- Pre-existing: `mvn install -DskipTests` fails on enforcer ban — parent POM flags `quarkus-junit` (Quarkus 3.32.2 renamed from `quarkus-junit5`). Build passes with `-Denforcer.skip=true`. Tests pass.
+- Pre-existing: CDI `ReactiveAgentIdentityVerificationService` UnsatisfiedResolutionException blocks @QuarkusTest — new platform-identity dependency needed. Tracked on #77.
 - parent#378 — docs/repos/casehub-life.md needs life-ui module section · S · Low
-- #60 — OpenClaw skill integration (L/High, blocked on openclaw Epic 4)
+
+## Cross-Module
+
+**Enabled** (we delivered, downstream work unblocked):
+- `connectors` — CalendarPlatform SPI follows ChatPlatform pattern (connectors#88) · M · Med
+- `iot` — MCP tool exposure for DeviceProvider (iot#69) · S · Low
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
-| #60 | OpenClaw skill integration | L | High | Blocked on openclaw Epic 4 |
+| connectors#88 | CalendarPlatform SPI + Google Calendar provider | M | Med | Follows chat-spi pattern |
+| iot#69 | MCP tool exposure for DeviceProvider | S | Low | SPI already exists |
 
 ## References
 
