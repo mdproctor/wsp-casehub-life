@@ -1,4 +1,4 @@
-*Updated: #77 closed — removed from What's Left.*
+*Updated: #77 closed — removed from What's Left. iot#69 closed — removed from Cross-Module and What's Next.*
 
 # Handoff — 2026-07-26
 
@@ -16,14 +16,12 @@ Two-tier skill model (NATIVE/OPENCLAW) for external service integration. All 32 
 
 **Enabled** (we delivered, downstream work unblocked):
 - `connectors` — CalendarPlatform SPI follows ChatPlatform pattern (connectors#88) · M · Med
-- `iot` — MCP tool exposure for DeviceProvider (iot#69) · S · Low
 
 ## What's Next
 
 | # | Description | Scale | Complexity | Notes |
 |---|-------------|-------|------------|-------|
 | connectors#88 | CalendarPlatform SPI + Google Calendar provider | M | Med | Follows chat-spi pattern |
-| iot#69 | MCP tool exposure for DeviceProvider | S | Low | SPI already exists |
 
 ## References
 
