@@ -1,4 +1,4 @@
-*Updated: #77 closed — removed from What's Left. iot#69 closed — removed from Cross-Module and What's Next.*
+*Updated: connectors#88 closed — removed from Cross-Module and What's Next.*
 
 # Handoff — 2026-07-26
 
@@ -12,16 +12,9 @@ Two-tier skill model (NATIVE/OPENCLAW) for external service integration. All 32 
 
 - parent#378 — docs/repos/casehub-life.md needs life-ui module section · S · Low
 
-## Cross-Module
-
-**Enabled** (we delivered, downstream work unblocked):
-- `connectors` — CalendarPlatform SPI follows ChatPlatform pattern (connectors#88) · M · Med
-
 ## What's Next
 
-| # | Description | Scale | Complexity | Notes |
-|---|-------------|-------|------------|-------|
-| connectors#88 | CalendarPlatform SPI + Google Calendar provider | M | Med | Follows chat-spi pattern |
+*Unchanged — `git show HEAD~1:HANDOFF.md`*
 
 ## References
 
