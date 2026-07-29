@@ -1,4 +1,4 @@
-*Updated: connectors#88 closed — removed from Cross-Module and What's Next.*
+*Updated: parent#378 closed — removed from What's Left.*
 
 # Handoff — 2026-07-26
 
@@ -10,7 +10,7 @@ Two-tier skill model (NATIVE/OPENCLAW) for external service integration. All 32 
 
 ## What's Left
 
-- parent#378 — docs/repos/casehub-life.md needs life-ui module section · S · Low
+None.
 
 ## What's Next
 
