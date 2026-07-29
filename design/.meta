@@ -1,0 +1,9 @@
+branch: issue-378-sync-life-ui-docs
+project-sha: 5b5fca814daed2c01d7fb12df35beee2a702f232
+date: 2026-07-29
+issue: 378
+issue-repo: casehubio/parent
+covers: 378
+flyway-next-v: none
+design-repo: cross-repo:parent
+design-section-hashes: 
