@@ -1,12 +1,14 @@
-*Updated: parent#378 closed — removed from What's Left.*
+# Handoff — 2026-07-30
 
-# Handoff — 2026-07-26
-
-Closed #60 (OpenClaw skill integration) and #77 (engine + platform SNAPSHOT API adaptation). Single squashed commit 9b0210e on main.
+Closed epic #8 (Layer 7 complete — all 6 child issues done). Closed #80 (engine-blackboard → engine-planning rename). Commit b73c50f on main.
 
 ## Last Session
 
-Two-tier skill model (NATIVE/OPENCLAW) for external service integration. All 32 worker prompts and 7 sentinel prompts upgraded to tool-aware — reference calendar_create_event, iot_get_state, bank_get_transactions, send_chat. 39 response schemas gain tool-derived fields and toolsUsed. Design spec adversarially reviewed (4 rounds, 14 issues). Fixed pre-existing SNAPSHOT API breaks: SettingsScope.of→Path, WorkerExecutionContext removed (engine#693), WorkerFunction<T,R> two-param.
+Mechanical Maven dependency rename (casehub-engine-blackboard → casehub-engine-planning, part of engine#811). Also adapted to 3 concurrent SNAPSHOT API breaks: GateRequired +QuorumConfig param, AgentRoutingContext +CognitiveDemand/dimensionScores, TrustWeightedAgentStrategy → TrustWeightedImplementationRoutingStrategy. Hardened ShowcaseScenarioTest against surefire retry losing static state.
+
+## Immediate Next Step
+
+No open issues on casehub-life. All layers (1–8) complete. Next work would be new feature planning or Layer 9.
 
 ## What's Left
 
@@ -14,8 +16,8 @@ None.
 
 ## What's Next
 
-*Unchanged — `git show HEAD~1:HANDOFF.md`*
+No open issues. Candidate work: new epic planning, Layer 9 scoping, or cross-platform integration work.
 
 ## References
 
-*Unchanged — `git show HEAD~1:HANDOFF.md`*
+*Unchanged — `git show HEAD~3:HANDOFF.md`*
