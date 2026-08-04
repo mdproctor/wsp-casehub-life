@@ -1,23 +1,28 @@
-# Handoff — 2026-07-30
+# Handoff — 2026-08-04
 
-Closed epic #8 (Layer 7 complete — all 6 child issues done). Closed #80 (engine-blackboard → engine-planning rename). Commit b73c50f on main.
+Branch `issue-81-life-ui-design` open for #81 (Life UI — Household Hub + executive assistant design).
 
 ## Last Session
 
-Mechanical Maven dependency rename (casehub-engine-blackboard → casehub-engine-planning, part of engine#811). Also adapted to 3 concurrent SNAPSHOT API breaks: GateRequired +QuorumConfig param, AgentRoutingContext +CognitiveDemand/dimensionScores, TrustWeightedAgentStrategy → TrustWeightedImplementationRoutingStrategy. Hardened ShowcaseScenarioTest against surefire retry losing static state.
+Closed epic #8 (Layer 7). Closed #80 (engine-blackboard → planning + SNAPSHOT adaptations). Started #81: designed Life UI with dock workbench layout, morning briefing, action items, family summary. Brainstormed executive assistant (email/WhatsApp/bank intake). Design spec reviewed (light, 4 dimensions). Implementation plan: 10 tasks. Completed Tasks 1–2 (multiplexed SSE, dashboard briefing endpoint). Task 4 blocked on pages-runtime transitive deps.
 
 ## Immediate Next Step
 
-No open issues on casehub-life. All layers (1–8) complete. Next work would be new feature planning or Layer 9.
+Resolve pages-runtime transitive dependency chain in life-ui (`loadSite` → js-yaml, marked, zod, echarts). Then wire `dockWorkbench()` into home-view (Task 4).
 
 ## What's Left
 
-None.
+- Task 4: Wire `dockWorkbench()` — blocked on transitive deps · M · Med
+- Tasks 3, 5–10: demo seeds, UI components, app shell, verification · L · Med
 
 ## What's Next
 
-No open issues. Candidate work: new epic planning, Layer 9 scoping, or cross-platform integration work.
+| # | Description | Scale | Complexity | Notes |
+|---|-------------|-------|------------|-------|
+| #81 | Complete Life UI implementation (Tasks 3–10) | L | Med | Design + plan done, 2/10 tasks done |
 
 ## References
 
-*Unchanged — `git show HEAD~3:HANDOFF.md`*
+- Spec: `specs/issue-81-life-ui-design/2026-08-04-life-ui-design.md`
+- Plan: `plans/2026-08-04-life-ui-household-hub.md`
+- Pages dock: casehub-pages#285 (CLOSED — shipped in today's SNAPSHOT)
