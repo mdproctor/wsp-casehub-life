@@ -1,0 +1,10 @@
+branch: issue-103-life-bug-fixes
+state: scaffolded
+project-sha: 1a342455fac1129f77184372934bd8f0144efbcd
+date: 2026-08-11
+issue: 103
+issue-repo: casehubio/life
+covers: 103,104,105,84
+flyway-next-v: none
+design-repo: project
+design-section-hashes: 
