@@ -62,6 +62,11 @@ The #140 non-goal should be annotated to clarify: "Server-side simulation
 engine" excludes data evolution in the browser. Cross-service orchestration
 is a different architectural layer and is covered by this spec.
 
+**Action required:** Issue #142's body still scopes "Phase 5: Scenario
+Engine (pages-runtime)" as purely client-side. Once this spec is accepted,
+#142 must be updated to reference this spec for the backend executor scope.
+Otherwise two issues claim overlapping territory.
+
 **Authoring models:** Two authoring models coexist:
 - **TypeScript constructors** (`simulated()`, `scenario()`, `replay()`) —
   type-safe, IDE-autocompletion, pages-only scenarios. Defined in #140.
@@ -91,6 +96,7 @@ scenario: life-household-demo
 description: "A week in the life of a family — tasks, contractors, health, finance"
 speed: 1                          # default playback speed
 loop: false                       # restart when complete
+on-error: continue                # continue | stop | pause
 
 data:                             # external data files (relative paths)
   bank-transactions: "data/bank-transactions-6mo.json"
@@ -148,6 +154,13 @@ processes the resulting CDI event as if it came from an external system
 (WhatsApp, bank feed, etc.). Application code cannot distinguish injected
 events from real ones.
 
+**Consumer obligation:** Visibility of `simulated` events in the UI
+requires the target app to emit SSE events for the relevant domain events.
+This is not automatic — it depends on the target app's SSE wiring. Apps
+that want injected events to appear in real-time UI updates must have SSE
+endpoints for those event types. This is the same requirement as for real
+external events.
+
 ### 3.3 Data shapes
 
 | Shape | `mode` value | Behaviour |
@@ -192,16 +205,30 @@ not contain `/` — any value containing `/` is always a literal path.
 
 ### 3.5 Triggers
 
-Same model as pages ScenarioEngine (#142):
+Triggers extend the model from pages ScenarioEngine (#142), adapted for
+the cross-platform executor where the backend owns the trigger graph:
 
 | Trigger | Fires when | Example |
 |---------|-----------|---------|
 | `TimeTrigger` | Scenario clock reaches offset | `{ at: 10000 }` — 10s into scenario |
 | `AfterTrigger` | Named step completes | `{ after: "seed-actors", delay: 5000 }` |
-| `DataTrigger` | Dataset matches predicate | `{ when: { dataset: "tasks", match: { status: "COMPLETED" } } }` |
+| `DataTrigger` | Polled endpoint matches predicate | `{ when: { endpoint: "GET /life-tasks", match: { status: "COMPLETED" }, poll: 500 } }` |
 
 Steps without a trigger fire at T=0. Multiple steps can share the same
 trigger — they execute concurrently.
+
+**DataTrigger evaluation boundary:** In the cross-platform model, all
+trigger evaluation is server-side. The backend executor polls the target
+service's API at the configured interval (`poll`, default 500ms) and
+evaluates the `match` predicate against the response. The client-side
+`DataSet` from #140 is not involved — the backend owns the trigger graph
+and only the backend can evaluate triggers consistently across delivery
+modes.
+
+Note that `DataTrigger` and `await: { endpoint, match }` (§5.3) are
+syntactically convergent — both poll an endpoint and match a predicate.
+The difference is semantic: a trigger gates step *start*, an await gates
+step *completion*. The executor can share the polling implementation.
 
 ### 3.6 UI form delivery — drill-down
 
@@ -223,6 +250,32 @@ ui-actions:
 Targets use `data-*` attributes, not CSS classes — decoupled from styling.
 The `await` at the end confirms the backend processed the submission.
 
+#### `fill: { from: data }` resolution
+
+The `from: data` form is syntactic sugar that maps the step's `data`
+properties to form fields via `data-field` attributes:
+
+1. For each key `k` in the step's `data` object, find the element with
+   `data-field="${k}"` within the current form context.
+2. Element type determines the dispatch action:
+
+| Element | Action |
+|---------|--------|
+| `<input type="text">`, `<textarea>` | `type` — sets value via keyboard simulation |
+| `<input type="checkbox">` | `click` — toggles if current state differs from data value |
+| `<select>` | `select` — selects the option matching the data value |
+| `<input type="date">`, `<input type="number">` | `type` — sets value as string |
+
+3. Only top-level keys are resolved — no nested dot-path expansion. For
+   nested form sections, use explicit `fill` entries or expand the section
+   first with `click: "[data-expand='...']"`.
+4. A `data-field` not found in the DOM produces a step warning (non-fatal,
+   logged). A DOM element with no matching data key is ignored.
+
+Explicit `fill: { field: value }` entries bypass this resolution and set
+each field directly — use when the data object shape doesn't match the
+form field names.
+
 ### 3.7 Schema rules
 
 | Field | Required when | Default | Valid values |
@@ -238,6 +291,7 @@ The `await` at the end confirms the backend processed the submission.
 | `await` | Optional | — | `{ event }`, `{ endpoint, match }`, or `{ delay }` |
 | `actor` | Optional | `demo-admin` | Actor identity for `X-Scenario-Actor` header |
 | `fast-fallback` | Optional | — | Alternative delivery for `fast` speed mode |
+| `on-error` | Optional (top-level) | `continue` | `continue`, `stop`, `pause` — see §5.5 |
 
 `data` cannot have both `source` and inline properties simultaneously —
 `source` references an external file; inline properties are the payload.
@@ -316,11 +370,36 @@ At startup, the demo impl scans `casehub.scenario.path` for a scenario file
 matching `casehub.scenario.active`, loads its `data` section, and pre-loads
 the referenced external data files for Pull-mode queries.
 
+**File distribution:** Scenario files and their data files live in the
+pages repo (or a shared `casehub-scenarios` resource module). Target
+services do not load scenario files from disk. Instead, the executor
+pushes Pull-mode data to each target service at startup via a bootstrap
+endpoint:
+
+```
+POST /scenario/bootstrap
+Content-Type: application/json
+{
+  "scenario": "life-household-demo",
+  "datasets": {
+    "bank-transactions": [ ... ],
+    "whatsapp-history": [ ... ]
+  }
+}
+```
+
+Each target service's demo impl exposes this endpoint and loads the
+received datasets for Pull-mode queries. This eliminates the file
+distribution problem — scenario files stay in one place (pages), and
+target services only need a bootstrap endpoint.
+
 **Startup ordering:** The executor (pages) checks target service health via
-`GET /q/health` before starting scenario playback. Services must be running
-and healthy (Pull-mode data loaded) before the first step fires. The
-executor retries with exponential backoff (max 30s) and fails with a
-diagnostic if any target service is unreachable.
+`GET /q/health` before starting scenario playback, then calls
+`POST /scenario/bootstrap` on each target service with the relevant data
+sections. Services must be running, healthy, and bootstrapped before the
+first step fires. The executor retries health checks with exponential
+backoff (max 30s) and fails with a diagnostic if any target service is
+unreachable.
 
 ## 5. Pages as Universal Executor
 
@@ -367,6 +446,31 @@ direct call in same-process mode):
 
 The backend is always authoritative. The frontend never changes speed or
 pause state independently — it reflects what the backend tells it.
+
+#### ControlChannel resilience
+
+**Reconnection:** On WebSocket disconnect, the frontend pauses its
+`ScenarioController` and displays a reconnecting indicator. On reconnect,
+the backend sends a full state snapshot (playing, speed, elapsed, active
+step). The frontend resets its controller from the snapshot — no
+reconciliation, just overwrite. The backend continues advancing the trigger
+graph during disconnection; any `ui-form` steps that fire while the
+frontend is disconnected are marked failed (selector timeout) and handled
+by the `on-error` policy.
+
+**Step completion acknowledgement:** The backend sets a per-step timeout
+(matching the step's `await` timeout, default 10s) after dispatching a
+`ui-action` message. If no `step-complete` or `step-failed` arrives within
+the timeout, the step is marked failed. No retry — UI actions are not
+idempotent (double-submitting a form creates duplicate data). The existing
+error model (§5.5) handles downstream effects.
+
+**State divergence:** Not a concern under this model. The frontend's
+`ScenarioController` does not maintain an independent timeline — it
+reflects the backend's state on every `state` message. Drift between
+messages is cosmetic (progress bar may lag slightly). On any reconnect,
+the full state snapshot resets the frontend to the backend's current
+position.
 
 ### 5.1 Cross-service coordination
 
@@ -488,11 +592,18 @@ Step execution errors are handled per delivery mode:
 | `ui-form` selector not found | Step fails after 5s selector wait. Error: "Selector `[data-action='submit']` not found in DOM". |
 | Bulk data load partial failure | Bulk steps report progress. Partial failure logs failed items and continues. Step completes with warning. |
 
-**Failure propagation:** A failed step does not abort the scenario by
-default. Steps with no dependency on the failed step continue executing.
-Steps chained via `AfterTrigger` to the failed step are skipped with a
-diagnostic. In `verify` mode, any step failure is recorded as an
-assertion failure in the JUnit report.
+**Failure propagation** is controlled by the top-level `on-error` field:
+
+| `on-error` | Behaviour |
+|-----------|-----------|
+| `continue` (default) | Failed step is logged. Dependent steps (via `AfterTrigger`) are skipped with a diagnostic. Independent steps continue. |
+| `stop` | Scenario aborts immediately on the first step failure. Use for demo scenarios where partial execution is worse than stopping. |
+| `pause` | Scenario pauses on failure. Operator can fix the issue and resume. Use for live demos where recovery is preferable to restart. |
+
+In `verify` mode, any step failure is recorded as an assertion failure in
+the JUnit report regardless of `on-error` setting. `on-error: stop`
+additionally halts the scenario on the first failure rather than running
+remaining independent steps.
 
 ## 6. Migration Path
 
@@ -700,14 +811,22 @@ falling back to `demo-admin` if absent. Scenario steps can specify an actor:
 ```
 The executor passes `actor` as the `X-Scenario-Actor` header value.
 
+**Implementation:** `DemoCurrentPrincipal` must be a shared CDI producer in
+`casehub-platform-api` (or a dedicated `casehub-scenario-support` module),
+not implemented per-app. The pattern is identical across all target services
+— reading the `X-Scenario-Actor` header, falling back to `demo-admin`,
+activated by `@IfBuildProfile("demo")`. N independent implementations of
+the same pattern is a divergence risk. Every app gets it transitively.
+
 SETTLED: Scenario discovery via config property (from Open Question 4).
 See §4.4. The executor reads `casehub.scenario.path` and presents available
 scenarios via a UI picker in `<scenario-controls>`. Health checks run before
 playback starts.
 
-## 10. Open Questions
+## 10. Non-Goals (Planned Future)
 
-1. **Recording:** Pages spec includes `recording(innerSource)` that
-   captures timestamped events from a live source. Should the backend
-   support recording live REST responses as scenario data files? This
-   would let developers record a real session and replay it as a demo.
+1. **Recording live sessions as scenario files.** Pages spec includes
+   `recording(innerSource)` that captures timestamped events from a live
+   source. Recording live REST responses as replayable scenario data files
+   is high-value for scenario authoring but is a separate concern from the
+   executor. Planned as a future phase — not in scope for this spec.
