@@ -36,6 +36,49 @@ visible) and automated verification (fast, headless).
    triggers, not a sequential list. Bulk loads run asynchronously while
    other steps continue. Synchronisation is explicit via `AfterTrigger`.
 
+### 2.1 Relationship to pages #140/#142
+
+The pages DataSource spec (#140) defines **client-side data simulation** —
+mutation rules, tick-driven evolution, `ScenarioController` managing a
+virtual-time priority queue in the browser. Its non-goal "Server-side
+simulation engine (all simulation runs client-side)" refers to data
+evolution: `simulated()` sources mutating datasets via TypeScript mutation
+rules remain a client-side concern.
+
+This spec defines **cross-platform scenario orchestration** — an executor
+that coordinates scripted demos across multiple CaseHub services via HTTP.
+The executor makes REST calls, injects simulated events, and dispatches
+UI automation. This is orchestration, not simulation. The two layers are
+complementary:
+
+| Layer | What it does | Where it runs | Spec |
+|-------|-------------|---------------|------|
+| Data simulation | Mutation rules evolve datasets over virtual time | Client (browser) | #140 |
+| Scenario orchestration | REST calls, event injection, UI automation across services | Server (Pages backend) + Client (UI actions) | This spec |
+
+The #140 non-goal should be annotated to clarify: "Server-side simulation
+engine" excludes data evolution in the browser. Cross-service orchestration
+is a different architectural layer and is covered by this spec.
+
+**Authoring models:** Two authoring models coexist:
+- **TypeScript constructors** (`simulated()`, `scenario()`, `replay()`) —
+  type-safe, IDE-autocompletion, pages-only scenarios. Defined in #140.
+- **YAML scenario files** — portable, cross-platform, consumed by both
+  a pages YAML parser and Java connector demo impls. Defined here.
+
+The pages YAML parser converts scenario files into `ScenarioConfig` objects
+that the existing TypeScript engine executes. Vocabulary mapping:
+
+| YAML | TypeScript type | Notes |
+|------|----------------|-------|
+| `navigate: "#path"` | `{ type: 'navigate', page: '#path' }` | Direct mapping |
+| `click: "[selector]"` | `{ type: 'click', target: '[selector]' }` | Direct mapping |
+| `fill: { field: value }` | Multiple `{ type: 'type', target, value }` | Compound — one UIAction per field, targets resolved via `data-field` attributes |
+| `await: { event: "..." }` | Synchronisation primitive | Not a UIAction — triggers step completion when condition met |
+| `select: { target, value }` | `{ type: 'select', target, value }` | Direct mapping |
+| `hover: "[selector]"` | `{ type: 'hover', target: '[selector]' }` | Direct mapping |
+| `scroll: { target, to }` | `{ type: 'scroll', target, to }` | Direct mapping |
+
 ## 3. Scenario Format
 
 ### 3.1 Top-level structure
@@ -77,7 +120,7 @@ steps:
       title: "Chase Bob for quote"
       domain: "CONTRACTOR_COORDINATION"
       deadline: "+3d"
-    steps:
+    ui-actions:
       - navigate: "#home"
       - click: "[data-action='new-task']"
       - fill: { from: data }
@@ -91,9 +134,16 @@ steps:
 
 | Mode | What happens | Visibility | Use case |
 |------|-------------|------------|----------|
-| `rest` | HTTP call to target app API | Invisible | Fast seeding, background state |
-| `ui-form` | Navigate, fill fields, click submit | Fully visible | Demo audience watches data entry |
-| `simulated` | Inject into connector SPI demo impl | Invisible to app, visible in UI via SSE | External events (messages, transactions, sensors) |
+| `rest` | HTTP call to target app's **normal API** (e.g. `POST /life-tasks`) | Invisible | Fast seeding, background state |
+| `ui-form` | Navigate, fill fields, click submit via UI automation | Fully visible | Demo audience watches data entry |
+| `simulated` | HTTP call to target app's **injection endpoint** (`POST /scenario/inject/{connector}`), which fires CDI events as if the external system sent them | Invisible to app code, visible in UI via SSE | External events (messages, transactions, sensors) |
+
+The distinction between `rest` and `simulated` is semantic, not mechanical.
+Both use HTTP POST. `rest` calls the app's real API — the app processes it
+as a normal request. `simulated` calls the injection endpoint — the app
+processes the resulting CDI event as if it came from an external system
+(WhatsApp, bank feed, etc.). Application code cannot distinguish injected
+events from real ones.
 
 ### 3.3 Data shapes
 
@@ -143,7 +193,7 @@ trigger — they execute concurrently.
 A `ui-form` delivery step is a composed sequence of UIActions:
 
 ```yaml
-steps:
+ui-actions:
   - navigate: "#cases"                      # go to the right view
   - click: "[data-case-id='abc123']"        # select a case
   - click: "[data-tab='commitments']"       # drill into a tab
@@ -157,6 +207,26 @@ steps:
 
 Targets use `data-*` attributes, not CSS classes — decoupled from styling.
 The `await` at the end confirms the backend processed the submission.
+
+### 3.7 Schema rules
+
+| Field | Required when | Default | Valid values |
+|-------|-------------|---------|-------------|
+| `name` | Always | — | Unique string within scenario |
+| `action` | All steps except pure-await steps | — | Freeform string describing the action |
+| `delivery` | All steps with `action` | `rest` | `rest`, `ui-form`, `simulated` |
+| `endpoint` | `delivery: rest` | — | HTTP method + path (e.g. `POST /life-tasks`) |
+| `target` | `delivery: simulated` | — | Connector name (e.g. `chat`, `bank`, `calendar`) |
+| `trigger` | Optional | Fires at T=0 | `TimeTrigger`, `AfterTrigger`, or `DataTrigger` |
+| `data` | Optional | — | Inline object or `{ source: "path", mode: "bulk" }` |
+| `ui-actions` | `delivery: ui-form` | — | Array of UI action primitives |
+| `await` | Optional | — | `{ event }`, `{ endpoint, match }`, or `{ delay }` |
+| `actor` | Optional | `demo-admin` | Actor identity for `X-Scenario-Actor` header |
+| `fast-fallback` | Optional | — | Alternative delivery for `fast` speed mode |
+
+`data` cannot have both `source` and inline properties simultaneously —
+`source` references an external file; inline properties are the payload.
+The `mode` field (`bulk`, `stepped`, `stream`) is only valid with `source`.
 
 ## 4. Connector SPI Demo Pattern
 
@@ -196,10 +266,17 @@ processes the injected event identically to a real inbound message.
 | SPI | Module | Pull (queries) | Push (events) |
 |-----|--------|---------------|---------------|
 | `ChatPlatform` | connectors/chat-spi | Message history, channels | Inbound messages |
-| `CalendarPlatform` | connectors/calendar-spi | Event queries | Event created/updated |
-| `BankFeedPlatform` | connectors (new) | Transaction queries | Transaction notifications |
-| `EmailPlatform` | connectors (new) | Inbox queries | Inbound emails |
-| `DeviceProvider` | iot | Device state, sensor readings | Sensor events, state changes |
+| `CalendarPlatform` | connectors/calendar-spi (exists — `RefCalendarPlatform`, `GoogleCalendarPlatform`) | Event queries | Event created/updated |
+| `BankFeedPlatform` | connectors (new SPI + module required) | Transaction queries | Transaction notifications |
+| `EmailPlatform` | connectors (new SPI + module required) | Inbox queries | Inbound emails |
+| `DeviceProvider` | iot (new) | Device state, sensor readings | Sensor events, state changes |
+
+**Dependency boundary:** Application repos (life, clinical, iot) add
+connector SPI modules as Maven dependencies — e.g. `casehub-connectors-chat-spi`.
+This follows the existing pattern: life already depends on connector core
+modules transitively via qhorus. The SPI modules are pure interfaces with
+no application-specific code, so this does not violate the boundary rule
+that application repos don't depend on each other.
 
 ### 4.3 Scenario data lifecycle
 
@@ -209,6 +286,26 @@ processes the injected event identically to a real inbound message.
    endpoint at times defined in the scenario file.
 3. **Teardown:** H2 in-memory database. No cleanup needed — restart clears
    everything.
+
+### 4.4 Scenario discovery and Pull-mode loading
+
+**How demo impls know which scenario is active:**
+
+Each target service reads a config property:
+```properties
+casehub.scenario.active=life-household-demo
+casehub.scenario.path=scenarios/
+```
+
+At startup, the demo impl scans `casehub.scenario.path` for a scenario file
+matching `casehub.scenario.active`, loads its `data` section, and pre-loads
+the referenced external data files for Pull-mode queries.
+
+**Startup ordering:** The executor (pages) checks target service health via
+`GET /q/health` before starting scenario playback. Services must be running
+and healthy (Pull-mode data loaded) before the first step fires. The
+executor retries with exponential backoff (max 30s) and fails with a
+diagnostic if any target service is unreachable.
 
 ## 5. Pages as Universal Executor
 
@@ -264,8 +361,29 @@ target without pages knowing its internals.
 | Step | manual | One step at a time | Debugging |
 
 In `fast` mode, `ui-form` delivery can optionally degrade to `rest`
-delivery for speed — same action, invisible execution. Configurable
-per scenario.
+delivery for speed — same action, invisible execution.
+
+**Degradation configuration:** Per-step via `fast-fallback`:
+```yaml
+- name: create-task-fast
+  action: create-task
+  delivery: ui-form
+  fast-fallback:
+    delivery: rest
+    endpoint: POST /life-tasks
+  data: { title: "Chase Bob" }
+  ui-actions:
+    - navigate: "#home"
+    - click: "[data-action='new-task']"
+    - fill: { from: data }
+    - click: "[data-action='submit']"
+```
+
+When the executor runs in `fast` mode, steps with `fast-fallback` use the
+fallback delivery instead of `ui-form`. Steps without `fast-fallback` are
+skipped in fast mode (no REST equivalent exists). The `fast-fallback` block
+requires its own `delivery` and `endpoint` — the executor does not infer
+endpoints from action names.
 
 ### 5.3 Await and verification
 
@@ -278,16 +396,60 @@ action:
 - await: { delay: 2000 }                           # simple wait
 ```
 
-For automated verification, `await` becomes an assertion — if the expected
-state doesn't materialise within a timeout, the scenario fails with a
-diagnostic.
+### 5.4 Verification mode
+
+Verification mode is activated by a runtime flag:
+```properties
+casehub.scenario.mode=verify    # default: demo
+```
+
+In `verify` mode:
+- Every `await` becomes an assertion with a configurable timeout
+- `{ delay: N }` awaits are skipped (pure timing has no assertion value)
+- Speed is automatically set to `fast`
+- Failure produces a JUnit XML report at `target/scenario-results.xml`
+  for CI integration, plus a human-readable summary on stderr
+
+**Timeout rules:**
+| Await type | Default timeout | Override |
+|-----------|----------------|---------|
+| `{ event: "..." }` | 10s | `timeout` field: `{ event: "...", timeout: 30000 }` |
+| `{ endpoint: "GET ...", match: {...} }` | 10s (polled every 500ms) | `timeout` field |
+| `{ delay: N }` | Skipped in verify mode | — |
+
+**Failure output:**
+```
+FAIL: step "create-task-visible" — await { event: "work-item-created" }
+      timed out after 10000ms. No matching SSE event received.
+      Last SSE events: [commitment-created, oversight-gate-resolved]
+```
+
+Non-zero exit code on any assertion failure.
+
+### 5.5 Error model
+
+Step execution errors are handled per delivery mode:
+
+| Failure | Behaviour |
+|---------|-----------|
+| `rest` delivery gets 4xx/5xx | Step fails. Error logged with status code and response body. Scenario continues — dependent steps (via `AfterTrigger`) are skipped with a diagnostic. |
+| `simulated` injection endpoint unreachable | Step fails. Scenario pauses with diagnostic: "Target service {host}:{port} unreachable for connector {name}". Operator can fix and resume. |
+| `await` with `event` never fires | Timeout (10s default). Step fails. Dependent steps skipped. |
+| `ui-form` selector not found | Step fails after 5s selector wait. Error: "Selector `[data-action='submit']` not found in DOM". |
+| Bulk data load partial failure | Bulk steps report progress. Partial failure logs failed items and continues. Step completes with warning. |
+
+**Failure propagation:** A failed step does not abort the scenario by
+default. Steps with no dependency on the failed step continue executing.
+Steps chained via `AfterTrigger` to the failed step are skipped with a
+diagnostic. In `verify` mode, any step failure is recorded as an
+assertion failure in the JUnit report.
 
 ## 6. Migration Path
 
 ### 6.1 Clinical DemoDataSeeder (first migration)
 
-Clinical's existing `DemoDataSeeder` replays full trial scenarios through
-real service calls. Convert to a scenario file:
+Clinical would benefit from a scenario seeder that replays full trial
+scenarios through real service calls. The scenario file format enables this:
 
 ```yaml
 scenario: clinical-trial-demo
@@ -310,7 +472,7 @@ steps:
     action: report-adverse-event
     delivery: ui-form
     data: { severity: "SERIOUS", description: "Headache grade 3" }
-    steps:
+    ui-actions:
       - navigate: "#trial/patients/patient-001"
       - click: "[data-action='report-ae']"
       - fill: { from: data }
@@ -318,8 +480,7 @@ steps:
       - await: { event: "ae-reported" }
 ```
 
-Same outcome as current `DemoDataSeeder` but portable, executable by pages,
-and optionally visible in the UI.
+Portable, executable by pages, and optionally visible in the UI.
 
 ### 6.2 Life household demo
 
@@ -371,7 +532,7 @@ steps:
     action: approve-oversight-gate
     delivery: ui-form
     data: { decision: "APPROVED", amount: 450 }
-    steps:
+    ui-actions:
       - navigate: "#inbox"
       - click: "[data-urgency='OVERDUE']:first-child"
       - click: "[data-action='approve']"
@@ -393,8 +554,51 @@ steps:
 
 ### 6.3 IoT smart home demo
 
-Scenario file for casehub-iot. `DeviceProvider` demo impl serves device
-state from scenario data. Sensor readings stream continuously.
+`DeviceProvider` demo impl serves device state from scenario data. Sensor
+readings stream continuously via the `stream` data mode.
+
+```yaml
+scenario: iot-smart-home-demo
+description: "Smart home sensors, thermostat control, security events"
+data:
+  devices: "data/home-devices.json"
+  sensor-history: "data/sensor-24h.json"
+
+steps:
+  - name: seed-devices
+    action: load-devices
+    delivery: simulated
+    target: iot
+    data: { source: devices, mode: bulk }
+
+  - name: temperature-stream
+    trigger: { after: seed-devices }
+    action: sensor-reading
+    delivery: simulated
+    target: iot
+    data:
+      source: "data/temperature-readings.json"
+      mode: stream
+      interval: 10000
+
+  - name: motion-detected
+    trigger: { after: seed-devices, delay: 15000 }
+    action: security-event
+    delivery: simulated
+    target: iot
+    data:
+      deviceId: "motion-sensor-01"
+      event: "MOTION_DETECTED"
+      zone: "front-door"
+
+  - name: thermostat-adjust
+    trigger: { after: motion-detected, delay: 5000 }
+    action: set-thermostat
+    delivery: rest
+    endpoint: POST /devices/thermostat-01/commands
+    data: { command: "SET_TEMPERATURE", value: 22 }
+    await: { event: "device-command-acknowledged" }
+```
 
 ## 7. Repos Affected
 
@@ -410,7 +614,7 @@ state from scenario data. Sensor readings stream continuously.
 | **clinical** | Migrate DemoDataSeeder to scenario file format |
 | **iot** | DeviceProvider demo impl. Scenario files for smart home demo |
 | **aml** | BankFeedPlatform consumer. Scenario files for investigation demo |
-| **blocks-ui** | Scenario-aware components — `<scenario-controls>`, `<dataset-explorer>` from pages may move here if reused across apps |
+| **blocks-ui** | No scenario-specific changes. `<scenario-controls>` and `<dataset-explorer>` remain in pages — they are part of the executor, not reusable block components |
 
 ## 8. Implementation Phases
 
@@ -423,25 +627,37 @@ state from scenario data. Sensor readings stream continuously.
 | 5 | IoT demo + BankFeed SPI + Email SPI | Phase 2 |
 | 6 | AML scenario | Phase 5 |
 
-## 9. Open Questions
+## 9. Settled Decisions
 
-1. **Scenario file format:** JSON or YAML? YAML is more readable for
-   scenario authors; JSON is more portable across runtimes. The pages
-   DataSource spec uses TypeScript constructors, not data files — format
-   alignment needed.
+SETTLED: YAML as the cross-platform scenario format (from Open Question 1).
+YAML is more readable for scenario authors and supports comments. The pages
+YAML parser converts files to `ScenarioConfig` objects (see §2.1). TypeScript
+constructors remain the developer-friendly authoring model for pages-only
+scenarios; the two are complementary.
 
-2. **Authentication in demo mode:** Pages executor makes REST calls to
-   target apps. Demo profile disables OIDC, but the executor still needs
-   identity context (`CurrentPrincipal`). Shared demo token? Per-step
-   actor identity?
+SETTLED: Demo profile authentication with per-step actor identity (from Open Question 2).
+All target services run in `demo` build profile (`@IfBuildProfile("demo")`).
+Demo profile disables OIDC. The executor sends a `X-Scenario-Actor` header
+on each REST call. Each target service's `DemoCurrentPrincipal` (e.g.
+`io.casehub.life.app.demo.DemoCurrentPrincipal`, activated by
+`@IfBuildProfile("demo")`) reads the actor identity from this header,
+falling back to `demo-admin` if absent. Scenario steps can specify an actor:
+```yaml
+- name: approve-invoice
+  actor: household-admin
+  action: approve-oversight-gate
+  delivery: ui-form
+```
+The executor passes `actor` as the `X-Scenario-Actor` header value.
 
-3. **Scenario discovery:** How does the executor find available scenarios?
-   Classpath scan? Config property pointing to a directory? UI picker?
+SETTLED: Scenario discovery via config property (from Open Question 4).
+See §4.4. The executor reads `casehub.scenario.path` and presents available
+scenarios via a UI picker in `<scenario-controls>`. Health checks run before
+playback starts.
 
-4. **Multi-app coordination:** The executor calls multiple apps. Startup
-   ordering? Health checks before scenario begins?
+## 10. Open Questions
 
-5. **Recording:** Pages spec includes `recording(innerSource)` that
+1. **Recording:** Pages spec includes `recording(innerSource)` that
    captures timestamped events from a live source. Should the backend
    support recording live REST responses as scenario data files? This
    would let developers record a real session and replay it as a demo.
