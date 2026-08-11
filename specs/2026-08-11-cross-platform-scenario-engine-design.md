@@ -28,9 +28,11 @@ visible) and automated verification (fast, headless).
    `@Alternative`. CDI profile switching selects the implementation. No
    conditional logic in application code.
 
-3. **One format, two runtimes.** A single JSON/YAML scenario format consumed
-   by both TypeScript (pages ScenarioController) and Java (connector demo
-   impls). Temporal semantics (offset, speed, loop, triggers) are identical.
+3. **One format, two runtimes.** A single YAML scenario format parsed by
+   the pages backend executor (Java) and executed across both the backend
+   (REST calls, event injection) and the frontend TypeScript engine (UI
+   actions, data simulation). Connector demo impls consume the `data`
+   section only — they load external data files, not the full format.
 
 4. **Concurrent by default.** Steps are a directed graph connected by
    triggers, not a sequential list. Bulk loads run asynchronously while
@@ -63,8 +65,9 @@ is a different architectural layer and is covered by this spec.
 **Authoring models:** Two authoring models coexist:
 - **TypeScript constructors** (`simulated()`, `scenario()`, `replay()`) —
   type-safe, IDE-autocompletion, pages-only scenarios. Defined in #140.
-- **YAML scenario files** — portable, cross-platform, consumed by both
-  a pages YAML parser and Java connector demo impls. Defined here.
+- **YAML scenario files** — portable, cross-platform, parsed by the
+  pages backend executor. Connector demo impls consume only the `data`
+  section (external data files for Pull-mode queries). Defined here.
 
 The pages YAML parser converts scenario files into `ScenarioConfig` objects
 that the existing TypeScript engine executes. Vocabulary mapping:
@@ -175,6 +178,18 @@ Data can be **inline** (in the scenario file) or **external** (referenced path):
 External files are resolved relative to the scenario file. Scenario files
 and their data files ship together as a directory.
 
+**`source` resolution:** The `source` field supports two forms:
+
+1. **Literal path** — a quoted string containing `/`:
+   `source: "data/bank-transactions-6mo.json"`. Resolved relative to the
+   scenario file.
+2. **Key lookup** — a bare word matching a key in the top-level `data:`
+   map: `source: actors` resolves to the path declared under `data:`.
+
+Resolution order: if the value matches a key in the top-level `data:` map,
+use the mapped path. Otherwise, treat it as a literal file path. Keys must
+not contain `/` — any value containing `/` is always a literal path.
+
 ### 3.5 Triggers
 
 Same model as pages ScenarioEngine (#142):
@@ -218,7 +233,7 @@ The `await` at the end confirms the backend processed the submission.
 | `endpoint` | `delivery: rest` | — | HTTP method + path (e.g. `POST /life-tasks`) |
 | `target` | `delivery: simulated` | — | Connector name (e.g. `chat`, `bank`, `calendar`) |
 | `trigger` | Optional | Fires at T=0 | `TimeTrigger`, `AfterTrigger`, or `DataTrigger` |
-| `data` | Optional | — | Inline object or `{ source: "path", mode: "bulk" }` |
+| `data` | Optional | — | Inline object or `{ source: "path-or-key", mode: "bulk" }` |
 | `ui-actions` | `delivery: ui-form` | — | Array of UI action primitives |
 | `await` | Optional | — | `{ event }`, `{ endpoint, match }`, or `{ delay }` |
 | `actor` | Optional | `demo-admin` | Actor identity for `X-Scenario-Actor` header |
@@ -311,16 +326,47 @@ diagnostic if any target service is unreachable.
 
 Pages' Quarkus backend becomes the scenario coordinator:
 
-1. **Load** — parse scenario file (JSON/YAML), build trigger graph
-2. **Schedule** — register triggers with `ScenarioController`
+1. **Load** — parse scenario YAML, build trigger graph
+2. **Schedule** — register triggers with the backend `ScenarioExecutor`
 3. **Execute per delivery mode:**
    - `rest` → HTTP call to target app API
    - `simulated` → HTTP call to target app's `/scenario/inject/{connector}` endpoint
-   - `ui-form` → dispatch UIActions to pages frontend ScenarioEngine
-4. **Coordinate** — `ScenarioController` manages speed, pause, step, elapsed
-   time across both backend and frontend execution
+   - `ui-form` → dispatch UIActions to pages frontend via `ControlChannel`
+4. **Coordinate** — `ScenarioExecutor` (backend) is authoritative for
+   scenario state; frontend `ScenarioController` (TypeScript, #140)
+   synchronises via `ControlChannel`
 5. **Observe** — `<scenario-controls>` and `<dataset-explorer>` from pages
    #142 Phase 7 provide the demo operator UI
+
+### 5.0.1 Backend/frontend controller architecture
+
+Two controllers exist, each owning its domain:
+
+| Controller | Runtime | Owns | Defined in |
+|-----------|---------|------|-----------|
+| `ScenarioExecutor` | Java (Pages backend) | Trigger graph, step scheduling, REST/injection delivery, scenario state (play/pause/speed/elapsed) | This spec |
+| `ScenarioController` | TypeScript (browser) | Virtual-time priority queue, data simulation ticks, UIAction dispatch | #140 |
+
+**Synchronisation via `ControlChannel`** (from #142 §4):
+
+The backend `ScenarioExecutor` acts as `ScenarioHost`. The frontend
+`ScenarioController` acts as `ScenarioRemote`. They communicate via the
+existing `ControlChannel` abstraction (WebSocket in cross-machine mode,
+direct call in same-process mode):
+
+1. **State → frontend:** Backend sends `{ type: 'state', state }` on every
+   state change (play/pause/speed). Frontend's `ScenarioController` applies
+   the state — `setSpeed()`, `play()`/`pause()`.
+2. **UI-form dispatch:** Backend sends `{ type: 'ui-action', stepName, actions }`.
+   Frontend executes the `UIAction` sequence and sends
+   `{ type: 'step-complete', stepName }` on completion (or
+   `{ type: 'step-failed', stepName, error }` on failure).
+3. **Commands → backend:** `<scenario-controls>` sends play/pause/step/speed
+   commands to the backend executor (not directly to the frontend controller).
+   The backend applies the command, then broadcasts updated state.
+
+The backend is always authoritative. The frontend never changes speed or
+pause state independently — it reflects what the backend tells it.
 
 ### 5.1 Cross-service coordination
 
@@ -406,7 +452,11 @@ casehub.scenario.mode=verify    # default: demo
 In `verify` mode:
 - Every `await` becomes an assertion with a configurable timeout
 - `{ delay: N }` awaits are skipped (pure timing has no assertion value)
-- Speed is automatically set to `fast`
+- All delivery modes execute normally — `ui-form` steps are NOT skipped.
+  Speed defaults to `normal` (1x). The operator can set speed to `fast`
+  explicitly (which applies `fast-fallback` rules from §5.2), but
+  verification does not force it. This ensures `ui-form` steps like
+  oversight gate approvals are verified through the real UI flow.
 - Failure produces a JUnit XML report at `target/scenario-results.xml`
   for CI integration, plus a human-readable summary on stderr
 
@@ -611,7 +661,7 @@ steps:
 | **work** | Scenario injection for WorkItem lifecycle events (optional — tasks can be created via REST) |
 | **platform** | Profile convention doc. Possibly shared scenario loading utility |
 | **life** | Scenario files for household demo. Consumer of all connector demo impls |
-| **clinical** | Migrate DemoDataSeeder to scenario file format |
+| **clinical** | Scenario files for trial demo |
 | **iot** | DeviceProvider demo impl. Scenario files for smart home demo |
 | **aml** | BankFeedPlatform consumer. Scenario files for investigation demo |
 | **blocks-ui** | No scenario-specific changes. `<scenario-controls>` and `<dataset-explorer>` remain in pages — they are part of the executor, not reusable block components |
