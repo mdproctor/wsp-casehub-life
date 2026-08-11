@@ -16,7 +16,7 @@ cannot distinguish scenario data from real data.
 Pages is the execution engine. Its Quarkus backend makes REST calls to any
 CaseHub service. Its frontend engine automates the UI. The scenario controls
 (`<scenario-controls>`) provide play/pause/speed/step for live demos (slow,
-visible) and automated verification (fast, headless).
+visible) and automated verification (assertion-checked, with JUnit output).
 
 ## 2. Principles
 
@@ -378,7 +378,7 @@ target without pages knowing its internals.
 ┌─────────────────────────────────────────────────┐
 │  Pages (Scenario Executor)                       │
 │                                                  │
-│  ScenarioController ─── speed, pause, timeline   │
+│  ScenarioExecutor ──── speed, pause, timeline     │
 │       │                                          │
 │       ├── REST delivery ──→ POST /life-tasks      │
 │       ├── REST delivery ──→ POST /trials          │
@@ -403,7 +403,7 @@ target without pages knowing its internals.
 |------|-------|-------------------|----------|
 | Demo | 0.5x–1x | Visible — slow form fills, annotations | Sales demo, conference |
 | Normal | 1x | Visible — real-time pace | Development testing |
-| Fast | 10x–100x | Skipped or instant | Automated verification |
+| Fast | 10x–100x | Skipped or instant (via `fast-fallback`) | Rapid seeding, speed testing |
 | Step | manual | One step at a time | Debugging |
 
 In `fast` mode, `ui-form` delivery can optionally degrade to `rest`
