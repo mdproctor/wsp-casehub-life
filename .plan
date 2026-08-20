@@ -1,0 +1,15 @@
+# Work Plan — issue-116-household-onboarding
+
+## State
+branch: issue-116-household-onboarding
+state: scaffolded
+project-sha: 58dc22e3332011c6c9cdd65d44b23f0c4a7932ed
+date: 2026-08-20
+issue-repo: casehubio/life
+covers: 116
+design-repo: project
+design-section-hashes: 
+flyway-next-v: none
+
+## Queue
+- [ ] #116 — Issue #116 ← active
