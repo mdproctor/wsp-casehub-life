@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-116-household-onboarding
-state: scaffolded
+state: active
 project-sha: 58dc22e3332011c6c9cdd65d44b23f0c4a7932ed
 date: 2026-08-20
 issue-repo: casehubio/life
@@ -12,4 +12,4 @@ design-section-hashes:
 flyway-next-v: none
 
 ## Queue
-- [ ] #116 — Issue #116 ← active
+- [ ] casehubio/life#116 — Household onboarding — family setup, role assignment, template customisation ← active

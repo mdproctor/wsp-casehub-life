@@ -1,15 +1,20 @@
-# Handoff — 2026-08-08
+# HANDOFF — casehub-life
 
-Branch `issue-81-life-ui-design` for #81 (Life UI — Household Hub). Phase 1 MVP feature-complete.
+**Date:** 2026-08-10
+**Branch:** `issue-85-life-ui-data-wiring`
+**Slot:** 99 (life + blocks-ui + ledger)
+
+---
 
 ## Last Session
 
-Enriched all 5 views with real data wiring and tabs. Fixed dashboard layout — replaced pages-ui `dockWorkbench()` (equal-split columns) with CSS grid dock bars (280px fixed panels, centre fills). Fixed 4 pre-existing test isolation failures (cross-class H2 WorkItem leakage + Quartz scheduler race). Updated ARC42STORIES.MD — Layer 7 casehub-openclaw marked complete, stale pending refs fixed.
+Wired Life UI views to real platform data (epic #85): reused `casehub-ledger-rest` instead of duplicating, added case-scoped tasks endpoint, built `cases-view.ts` (6 tabs) and `journal-view.ts`, added `actionType` to `PendingActionResponse`, applied visibility filtering (#102), fixed metadata/payload field alignment in ledger repo (#101). Created epic #95 with 7 child issues for remaining gaps. Added blocks-ui and ledger repos to slot 99.
 
 ## Immediate Next Step
 
-Branch `issue-81-life-ui-design` is still open for #81. Phase 1 delivered; remaining work is Phase 2 scope (cases/people detail depth, conversational UI) or new feature planning. Run `/work` to continue.
+Continue with #96 (routing data endpoint) and #97 (CBR retrieval endpoint). Both need investigation: routing data may come from engine execution records or WorkItem candidateScores; CBR data lives in ephemeral case context — consider re-querying the CBR store or persisting results at case start. Run `/work` to resume.
 
-## References
+## Cross-Module
 
-*Unchanged — `git show HEAD~1:HANDOFF.md`*
+**Enabled:**
+- ledger — metadata→payload field rename landed (commit a69b9c8, life#101). Life consumes via `casehub-ledger-rest` dependency.
