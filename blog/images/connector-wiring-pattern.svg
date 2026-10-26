@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="720" height="420" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Title -->
+  <text x="360" y="30" text-anchor="middle" font-size="14" font-weight="600" fill="#1e293b">Worker → MCP Tool → Connector Platform SPI</text>
+
+  <!-- Workers column -->
+  <text x="100" y="62" text-anchor="middle" font-size="11" font-weight="600" fill="#64748b">WORKERS</text>
+
+  <rect x="20" y="75" width="160" height="32" rx="4" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="100" y="96" text-anchor="middle" font-size="10" fill="#1e40af">request-quote</text>
+
+  <rect x="20" y="115" width="160" height="32" rx="4" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="100" y="136" text-anchor="middle" font-size="10" fill="#1e40af">book-appointment</text>
+
+  <rect x="20" y="155" width="160" height="32" rx="4" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="100" y="176" text-anchor="middle" font-size="10" fill="#1e40af">find-alternative</text>
+
+  <rect x="20" y="195" width="160" height="32" rx="4" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="100" y="216" text-anchor="middle" font-size="10" fill="#1e40af">get-quotes</text>
+
+  <rect x="20" y="235" width="160" height="32" rx="4" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="100" y="256" text-anchor="middle" font-size="10" fill="#1e40af">pre-visit-prep</text>
+
+  <rect x="20" y="275" width="160" height="32" rx="4" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="100" y="296" text-anchor="middle" font-size="10" fill="#1e40af">produce-report</text>
+
+  <rect x="20" y="315" width="160" height="32" rx="4" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="100" y="336" text-anchor="middle" font-size="10" fill="#1e40af">confirmation</text>
+
+  <rect x="20" y="355" width="160" height="32" rx="4" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="100" y="376" text-anchor="middle" font-size="10" fill="#1e40af">destination-research</text>
+
+  <!-- MCP Tools column -->
+  <text x="360" y="62" text-anchor="middle" font-size="11" font-weight="600" fill="#64748b">MCP TOOLS (prompt-level)</text>
+
+  <rect x="280" y="105" width="160" height="32" rx="4" fill="#fef3c7" stroke="#fcd34d" stroke-width="1"/>
+  <text x="360" y="126" text-anchor="middle" font-size="10" fill="#92400e">search_contacts</text>
+
+  <rect x="280" y="165" width="160" height="32" rx="4" fill="#fef3c7" stroke="#fcd34d" stroke-width="1"/>
+  <text x="360" y="186" text-anchor="middle" font-size="10" fill="#92400e">send_email</text>
+
+  <rect x="280" y="225" width="160" height="32" rx="4" fill="#fef3c7" stroke="#fcd34d" stroke-width="1"/>
+  <text x="360" y="246" text-anchor="middle" font-size="10" fill="#92400e">sync_documents</text>
+
+  <rect x="280" y="285" width="160" height="32" rx="4" fill="#fef3c7" stroke="#fcd34d" stroke-width="1"/>
+  <text x="360" y="306" text-anchor="middle" font-size="10" fill="#92400e">search_places</text>
+
+  <rect x="280" y="345" width="160" height="32" rx="4" fill="#fef3c7" stroke="#fcd34d" stroke-width="1"/>
+  <text x="360" y="366" text-anchor="middle" font-size="10" fill="#92400e">get_directions</text>
+
+  <!-- Platform SPIs column -->
+  <text x="620" y="62" text-anchor="middle" font-size="11" font-weight="600" fill="#64748b">PLATFORM SPIs</text>
+
+  <rect x="540" y="105" width="160" height="32" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="620" y="126" text-anchor="middle" font-size="10" fill="#166534">ContactsPlatform</text>
+
+  <rect x="540" y="165" width="160" height="32" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="620" y="186" text-anchor="middle" font-size="10" fill="#166534">EmailPlatform</text>
+
+  <rect x="540" y="225" width="160" height="32" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="620" y="246" text-anchor="middle" font-size="10" fill="#166534">DocumentPlatform</text>
+
+  <rect x="540" y="285" width="160" height="32" rx="4" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+  <text x="620" y="306" text-anchor="middle" font-size="10" fill="#166534">LocationPlatform</text>
+
+  <!-- Worker → MCP arrows (selected key connections) -->
+  <!-- request-quote → search_contacts -->
+  <line x1="180" y1="91" x2="278" y2="121" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+  <!-- book-appointment → search_contacts -->
+  <line x1="180" y1="131" x2="278" y2="121" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+  <!-- find-alternative → search_contacts -->
+  <line x1="180" y1="171" x2="278" y2="121" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+  <!-- get-quotes → search_contacts -->
+  <line x1="180" y1="211" x2="278" y2="121" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+
+  <!-- pre-visit-prep → send_email -->
+  <line x1="180" y1="251" x2="278" y2="181" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+  <!-- produce-report → send_email -->
+  <line x1="180" y1="291" x2="278" y2="181" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+  <!-- produce-report → sync_documents -->
+  <line x1="180" y1="291" x2="278" y2="241" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+  <!-- confirmation → send_email -->
+  <line x1="180" y1="331" x2="278" y2="181" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+  <!-- confirmation → sync_documents -->
+  <line x1="180" y1="331" x2="278" y2="241" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+
+  <!-- find-alternative → search_places -->
+  <line x1="180" y1="171" x2="278" y2="301" stroke="#64748b" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrowhead)"/>
+  <!-- get-quotes → search_places -->
+  <line x1="180" y1="211" x2="278" y2="301" stroke="#64748b" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrowhead)"/>
+  <!-- destination-research → search_places -->
+  <line x1="180" y1="371" x2="278" y2="301" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+  <!-- destination-research → get_directions -->
+  <line x1="180" y1="371" x2="278" y2="361" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+
+  <!-- MCP → Platform arrows -->
+  <line x1="440" y1="121" x2="538" y2="121" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="440" y1="181" x2="538" y2="181" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="440" y1="241" x2="538" y2="241" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="440" y1="301" x2="538" y2="301" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="440" y1="361" x2="538" y2="301" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <!-- Legend -->
+  <text x="20" y="410" font-size="9" fill="#94a3b8">Solid lines: primary tool for the worker. Dashed lines: secondary discovery tool.</text>
+</svg>
