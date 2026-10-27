@@ -48,45 +48,39 @@ entirely with existing primitives:
 
 ### 3.1 Case definition shape
 
+The YAML file contains only domain workers. The planning worker runs
+pre-engine (§3.5), and flow workers are added programmatically per-case
+by `buildFreshDefinition()` (§3.5) based on the planning output.
+
 ```yaml
-# Example: home-maintenance-cycle.yaml (revised)
-# NOTE: The planning worker is NOT a YAML step — it is invoked programmatically
-# by LifeCaseService.startCase() as Phase 3 of the Extended case start (§3.5).
-# The YAML contains only engine-executed workers.
+# home-maintenance.yaml — domain workers only
+# Flow workers (pre-stage-data, post-process-results) are NOT in this YAML.
+# They are wired per-case by buildFreshDefinition() after the planning
+# worker selects templates. See §3.5 Extended case start.
 steps:
-  - worker: pre-stage-data
-    capability: mechanical-pre-staging
-    condition: "coordinationPlan.preTemplate != null"
-    # FlowWorkerFunction — do: block loaded from catalog template
-    do:
-      - call: casehub:connector/contacts/searchContacts
-        with:
-          query: "${input.contractorName}"
-      - call: casehub:connector/location/searchPlaces
-        with:
-          query: "${input.siteAddress}"
-      - call: casehub:connector/calendar/listEvents
-        with:
-          startDate: "${input.startDate}"
-          endDate: "${input.endDate}"
+  - worker: schedule-inspection
+    capability: schedule-inspection
+    # AgentExec — domain judgment
+  - worker: get-quotes
+    capability: get-quotes
+    # AgentExec — domain judgment
+  # ... remaining domain workers ...
+```
 
-  # ... existing domain workers (AgentExec) ...
-  # Receive pre-assembled context from pre-staging output
+**After `buildFreshDefinition()` wires flow workers** (conceptual — shows
+what the engine receives, not the YAML file content):
 
-  - worker: post-process-results
-    capability: mechanical-post-processing
-    condition: "coordinationPlan.postTemplate != null"
-    # FlowWorkerFunction — do: block loaded from catalog template
-    do:
-      - call: casehub:connector/documents/uploadFile
-        with:
-          fileName: "${output.reportName}"
-          content: "${output.reportContent}"
-      - call: casehub:connector/messaging/sendEmail
-        with:
-          to: "${output.recipientEmail}"
-          subject: "${output.emailSubject}"
-          body: "${output.emailBody}"
+```
+  pre-stage-data              ← FlowWorkerFunction (from "contractor-onboarding" template)
+    call: casehub:connector/contacts/searchContacts
+    call: casehub:connector/location/searchPlaces
+    call: casehub:connector/calendar/listEvents
+  schedule-inspection         ← AgentExec (from YAML, copied from cached base)
+  get-quotes                  ← AgentExec (from YAML, copied from cached base)
+  ...
+  post-process-results        ← FlowWorkerFunction (from "completion-report" template)
+    call: casehub:connector/documents/uploadFile
+    call: casehub:connector/messaging/sendEmail
 ```
 
 ### 3.2 ConnectorCallableDispatcher
@@ -199,8 +193,36 @@ public class CoordinationTemplateCatalog {
     List<CoordinationTemplate> findByCapabilities(Set<String> capabilities);
     Optional<CoordinationTemplate> findByName(String name);
     void save(CoordinationTemplate template);  // runtime store
+
+    /** Resolve a template name to a parsed SWF Workflow. */
+    Workflow resolveToWorkflow(String templateName) {
+        CoordinationTemplate t = findByName(templateName)
+            .orElseThrow(() -> new IllegalArgumentException(
+                "Unknown template: " + templateName));
+        return parseTemplateYaml(t.templateYaml());
+    }
+
+    /** Parse a do: block YAML string into a Workflow. */
+    static Workflow parseTemplateYaml(String templateYaml) {
+        // Wrap bare do: block with SWF document header
+        ObjectNode doc = MAPPER.createObjectNode();
+        doc.putObject("document")
+           .put("dsl", "1.0.0")
+           .put("name", "template")
+           .put("namespace", "life")
+           .put("version", "1.0.0");
+        doc.set("do", MAPPER.readTree(templateYaml).get("do"));
+        return WorkflowReader.readWorkflowFromString(
+            MAPPER.writeValueAsString(doc), WorkflowFormat.YAML);
+    }
 }
 ```
+
+The `resolveToWorkflow()` convenience method encapsulates the full
+resolution chain: `findByName()` → `templateYaml()` → parse with
+document wrapper → `WorkflowReader.readWorkflowFromString()`.
+The same parse path that `FlowWorkerFunctionProvider.create()` uses
+internally, extracted for reuse.
 
 Classpath templates are loaded at startup and merged with runtime templates.
 The catalog exposes a unified query surface for the planning worker.
@@ -239,9 +261,19 @@ It outputs a `CoordinationPlan`:
 }
 ```
 
-**Guard conditions:** Pre/post-processing flow workers have guards that
-check `coordinationPlan.preTemplate` / `coordinationPlan.postTemplate`.
-If the planner doesn't select a template, the flow worker is skipped.
+**Worker activation:** The `workerActivation` section controls domain
+workers:
+- `skipWorkers` — names of domain workers to remove from the definition
+  (e.g., skip `get-quotes` when the contractor is pre-selected)
+- `workerParams` — key-value pairs injected into case context for
+  specific workers (e.g., `{"schedule-inspection": {"priority": "urgent"}}`)
+
+`buildFreshDefinition()` applies `skipWorkers` by filtering the workers
+list. `workerParams` are merged into `initialContext` before engine start.
+
+**Guard conditions:** Pre/post-processing flow workers are only added by
+`buildFreshDefinition()` when the planning worker selects a template.
+If the planner doesn't select a template, no flow worker is added.
 
 **Template generation:** When no existing template matches, the planner
 generates a new `do:` block YAML and includes it in `generatedTemplates`.
@@ -323,6 +355,15 @@ public CaseDefinition buildFreshDefinition(CoordinationPlan plan) {
     fresh.setCompletion(cached.getCompletion());
     // ... remaining setters
 
+    // Apply workerActivation — skip/parameterise domain workers
+    if (plan.workerActivation() != null) {
+        if (plan.workerActivation().skipWorkers() != null) {
+            fresh.getWorkers().removeIf(w ->
+                plan.workerActivation().skipWorkers().contains(w.name()));
+        }
+        // workerParams are injected into case context for workers to read
+    }
+
     // Add flow workers for this specific case
     if (plan.preTemplate() != null) {
         Workflow preWf = catalog.resolveToWorkflow(plan.preTemplate());
@@ -342,7 +383,8 @@ public CaseDefinition buildFreshDefinition(CoordinationPlan plan) {
     }
     // Wire generated templates (validated by CoordinationTemplateValidator)
     for (var gen : plan.generatedTemplates()) {
-        Workflow genWf = FlowWorkerFunctionProvider.parseDoBlock(gen.templateYaml());
+        Workflow genWf = CoordinationTemplateCatalog
+            .parseTemplateYaml(gen.templateYaml());
         fresh.getWorkers().add(Worker.builder()
             .name(gen.name())
             .capabilityName(gen.name())
