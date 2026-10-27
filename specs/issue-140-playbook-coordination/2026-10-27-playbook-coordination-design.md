@@ -103,11 +103,10 @@ Examples:
 - `casehub:connector/documents/uploadFile`
 - `casehub:connector/bank/listTransactions`
 
-**Resolution:** The dispatcher parses the call name into domain and
-operation, constructs the REST path from the `@McpDomain.basePath`
-convention (`/api/connectors/{domain}/{operationPath}`), and invokes
-it with the `with:` params as query parameters (GET/queries) or
-request body (POST/mutations).
+**Resolution:** The dispatcher extracts the call name from `args.get("_callName")`
+(injected by the engine's `CasehubCallableTaskBuilder` — see §3.8), parses
+it into domain and operation segments, and constructs the REST path using a
+static domain-to-basePath mapping table.
 
 ```java
 @ApplicationScoped
@@ -118,9 +117,14 @@ public class ConnectorCallableDispatcher implements CallableDispatcher {
     @Override
     public CompletableFuture<Map<String, Object>> dispatch(
             String workflowInstanceId, Map<String, Object> args) {
-        String domain = args.get("_domain").toString();
-        String operation = args.get("_operation").toString();
-        Map<String, Object> params = filterInternalKeys(args);
+        String callName = (String) args.get("_callName");
+        // callName = "casehub:connector/contacts/searchContacts"
+        String[] parts = callName.split("/", 3);
+        // parts = ["casehub:connector", "contacts", "searchContacts"]
+        String domain = parts[1];
+        String operation = parts[2];
+        Map<String, Object> params = new HashMap<>(args);
+        params.remove("_callName");
         return router.invoke(domain, operation, params);
     }
 }
@@ -136,10 +140,20 @@ than runtime annotation scanning.
 
 **Registration lifecycle:** `CasehubFlowContext.init()` is called by the
 engine framework at bootstrap, creating the `CallableDispatchRegistry`
-instance. `ConnectorCallableDispatcher` registers via a CDI `@Observes
-StartupEvent` observer that calls
-`CasehubFlowContext.callableRegistry().registerPrefix("casehub:connector/", this)`.
-This requires the `registerPrefix()` enhancement (see §3.8).
+instance. `CasehubFlowContext.callableRegistry()` is package-private
+(`io.casehub.engine.flow`), so application code cannot call it directly.
+Registration uses a new public facade on `CasehubFlowContext`:
+
+```java
+// Engine-level addition to CasehubFlowContext (casehub-engine-support-core)
+public static void registerPrefix(String prefix, CallableDispatcher d) {
+    callableRegistry().registerPrefix(prefix, d);
+}
+```
+
+`ConnectorCallableDispatcher` registers via a CDI `@Observes StartupEvent`
+observer that calls `CasehubFlowContext.registerPrefix("casehub:connector/", this)`.
+This requires three engine-level changes listed in §3.8.
 
 ### 3.3 Coordination template catalog
 
@@ -253,33 +267,22 @@ the planning worker to fall back to MCP tool calls for that operation set.
 
 ### 3.5 Template injection in configureCase()
 
-The `LifeTypedCaseHub` subclasses wire flow workers in `configureCase()`.
+The `LifeTypedCaseHub` subclasses wire domain workers in `configureCase()`.
 The actual API is `configureCase(CaseDefinition definition)` — there is no
-`CaseDefinitionBuilder`. Workers are added via `definition.getWorkers().add()`
-with `Worker.builder()`:
+`CaseDefinitionBuilder`. Workers are added via `definition.getWorkers().add()`.
+
+Flow workers are NOT added in `configureCase()` — they are added per-case
+by `buildFreshDefinition()` (see below). The base cached definition contains
+only domain workers:
 
 ```java
 @Override
 protected void configureCase(CaseDefinition definition) {
-    // NOTE: planning worker is NOT added here — it runs pre-engine
-    // in LifeCaseService.startCase() Phase 3
-
-    // ... existing domain workers (agentWorker calls) ...
-
-    // Pre-processing — FlowWorkerFunction, guarded
-    // Template wired at Extended case start (§3.5 below), not here
-    definition.getWorkers().add(Worker.builder()
-        .name("pre-stage-data")
-        .capabilityName("mechanical-pre-staging")
-        .function(new FlowWorkerFunction(defaultPreTemplate()))
-        .build());
-
-    // Post-processing — FlowWorkerFunction, guarded
-    definition.getWorkers().add(Worker.builder()
-        .name("post-process-results")
-        .capabilityName("mechanical-post-processing")
-        .function(new FlowWorkerFunction(defaultPostTemplate()))
-        .build());
+    // Domain workers only — no flow workers here.
+    // Flow workers are added per-case by buildFreshDefinition().
+    definition.getWorkers().add(agentWorker("schedule-inspection", ...));
+    definition.getWorkers().add(agentWorker("get-quotes", ...));
+    // ... etc
 }
 ```
 
@@ -290,21 +293,114 @@ cached singleton, making per-case dynamic template selection impossible.
 
 The solution: `LifeCaseService.startCase()` calls `caseHubRuntime.startCase(
 definition, inputData)` directly (the public `CaseHubRuntime` API), bypassing
-`CaseHub.startCase()`. The `LifeTypedCaseHub` exposes a
-`buildFreshDefinition(CoordinationPlan plan)` method that:
+`CaseHub.startCase()`.
 
-1. Calls `getDefinition()` to get the base cached definition
-2. Deep-copies it
-3. Replaces the flow worker `FlowWorkerFunction` instances with the
-   templates selected by the planning worker
+**Per-case definition construction:** `CaseDefinition` has no `copy()`,
+`clone()`, or `toBuilder()` method. However, its constructor is public:
+`new CaseDefinition(namespace, name, version)` creates a fresh instance
+with empty mutable lists (`getWorkers()`, `getCapabilities()`, `getBindings()`,
+`getMilestones()`, `getGoals()` all return `ArrayList`). Setter methods
+exist for non-list fields (`setDsl()`, `setTitle()`, `setSummary()`,
+`setAgentDescriptors()`, `setSemanticData()`, `setCompletion()`, etc.).
+
+`LifeTypedCaseHub.buildFreshDefinition(CoordinationPlan plan)`:
+
+```java
+public CaseDefinition buildFreshDefinition(CoordinationPlan plan) {
+    CaseDefinition cached = getDefinition();  // base with domain workers
+    CaseDefinition fresh = new CaseDefinition(
+        cached.getNamespace(), cached.getName(), cached.getVersion());
+
+    // Copy domain workers from cached base
+    fresh.getWorkers().addAll(cached.getWorkers());
+    // Copy other mutable lists
+    fresh.getCapabilities().addAll(cached.getCapabilities());
+    fresh.getBindings().addAll(cached.getBindings());
+    fresh.getMilestones().addAll(cached.getMilestones());
+    fresh.getGoals().addAll(cached.getGoals());
+    // Copy setter-based fields
+    fresh.setAgentDescriptors(cached.getAgentDescriptors());
+    fresh.setCompletion(cached.getCompletion());
+    // ... remaining setters
+
+    // Add flow workers for this specific case
+    if (plan.preTemplate() != null) {
+        Workflow preWf = catalog.resolveToWorkflow(plan.preTemplate());
+        fresh.getWorkers().add(0, Worker.builder()
+            .name("pre-stage-data")
+            .capabilityName("mechanical-pre-staging")
+            .function(new FlowWorkerFunction(preWf))
+            .build());
+    }
+    if (plan.postTemplate() != null) {
+        Workflow postWf = catalog.resolveToWorkflow(plan.postTemplate());
+        fresh.getWorkers().add(Worker.builder()
+            .name("post-process-results")
+            .capabilityName("mechanical-post-processing")
+            .function(new FlowWorkerFunction(postWf))
+            .build());
+    }
+    // Wire generated templates (validated by CoordinationTemplateValidator)
+    for (var gen : plan.generatedTemplates()) {
+        Workflow genWf = FlowWorkerFunctionProvider.parseDoBlock(gen.templateYaml());
+        fresh.getWorkers().add(Worker.builder()
+            .name(gen.name())
+            .capabilityName(gen.name())
+            .function(new FlowWorkerFunction(genWf))
+            .build());
+    }
+    return fresh;
+}
+```
+
+This is a shallow copy — sufficient because `Worker` is an immutable Java
+record and the only per-case variation is WHICH workers are in the list.
+Shared references to bindings, milestones, goals are safe since they are
+not modified per case.
+
+**Follow-up:** A proper `CaseDefinition.copy()` method in `casehub-engine-api`
+would eliminate the fragile field-by-field copy. Filed as an engine enhancement.
+
+**Planning worker invocation (Phase 3):** The planning worker runs
+pre-engine via direct `WorkerAgentInvoker.execute()` call — the same
+mechanism that `AgentWorkerFunction` uses inside the engine, invoked
+outside it:
+
+```java
+// In LifeCaseService.startCase(), after CBR retrieval (Phase 2):
+WorkerAgentInvoker plannerInvoker = hub.agentProviderFactory
+    .invokerFor(hub.agent(), planningSystemPrompt,
+                null, CoordinationPlanResult.class,
+                hub.cbrInputTransformer);
+
+// Synchronous LLM call — blocks until completion (120s default timeout)
+WorkerResult<Map<String, Object>> result = plannerInvoker.execute(initialContext);
+
+// Deserialize to typed result
+CoordinationPlanResult planResult = objectMapper.convertValue(
+    result.output(), CoordinationPlanResult.class);
+
+// Phase 4: build fresh definition with selected templates
+CaseDefinition freshDef = hub.buildFreshDefinition(planResult.plan());
+
+// Phase 5: start engine
+UUID caseId = caseHubRuntime.startCase(freshDef, initialContext);
+```
+
+Error handling: `WorkerAgentInvoker` throws `AgentException` on LLM
+failure, timeout, or invalid JSON response. `LifeCaseService.startCase()`
+already catches `Exception` and calls `markFailed(trackerId)` — the
+planning worker failure follows the same error recovery path as any
+other case start failure.
 
 This extends the existing three-phase case start (PP-20260529-3ffe28):
 
-1. Case definition scaffold (existing Phase 1)
+1. Case definition scaffold + tracking (existing Phase 1)
 2. CBR retrieval + adaptation (existing Phase 2)
-3. **Planning worker invocation** — LLM selects templates (new Phase 3)
-4. **Case definition build** — `buildFreshDefinition(plan)` wires selected
-   templates into a fresh definition copy (new Phase 4)
+3. **Planning worker invocation** — synchronous `WorkerAgentInvoker.execute()`
+   selects templates (new Phase 3)
+4. **Case definition build** — `buildFreshDefinition(plan)` constructs
+   a fresh definition with flow workers wired (new Phase 4)
 5. **Engine start** — `caseHubRuntime.startCase(freshDefinition, inputData)`
 
 The case definition is fully resolved before the engine starts executing.
@@ -348,14 +444,17 @@ are all in `casehub-engine-support-core` (artifact `casehub-engine-support-core`
 package `io.casehub.engine.flow`). This artifact is already a transitive
 dependency via `casehub-engine` in `app/pom.xml`. No new dependency needed.
 
-**Required engine change:** `CallableDispatchRegistry` currently uses
-`ConcurrentHashMap.get()` for exact-match lookup only. The spec's
-single-dispatcher model requires prefix-based dispatch. Add a
-`registerPrefix(String prefix, CallableDispatcher dispatcher)` method
-that stores prefix-based dispatchers separately. The `get()` method
-tries exact match first, then falls back to longest-prefix match:
+**Three required engine changes** in `casehub-engine-support-core`:
+
+**Change 1 — `CallableDispatchRegistry.registerPrefix()`:** The registry
+currently uses `ConcurrentHashMap.get()` for exact-match lookup only.
+Add prefix-based dispatch:
 
 ```java
+public void registerPrefix(String prefix, CallableDispatcher dispatcher) {
+    prefixDispatchers.put(prefix, dispatcher);
+}
+
 public CallableDispatcher get(final String callName) {
     CallableDispatcher d = dispatchers.get(callName);
     if (d != null) return d;
@@ -366,8 +465,39 @@ public CallableDispatcher get(final String callName) {
 }
 ```
 
-This is a backwards-compatible enhancement — existing exact-match
-registrations continue to work. File engine issue for this change.
+**Change 2 — `CasehubCallableTaskBuilder` call name injection:** The
+current `init()` method passes only `with:` params to `dispatch()`. The
+dispatcher needs the call name to determine domain/operation. Inject it:
+
+```java
+public CallableTaskFactory init(CallFunction task, ...) {
+    String callName = task.getCall();
+    Map<String, Object> baseArgs = task.getWith() != null
+        ? task.getWith().getAdditionalProperties() : Map.of();
+    Map<String, Object> enrichedArgs = new HashMap<>(baseArgs);
+    enrichedArgs.put("_callName", callName);
+    return () -> (wfCtx, taskCtx, input) -> {
+        String instanceId = wfCtx.instanceData().id();
+        return callableRegistry().get(callName)
+            .dispatch(instanceId, enrichedArgs)
+            .thenApply(out -> wfCtx.definition().application()
+                .modelFactory().from(out));
+    };
+}
+```
+
+**Change 3 — `CasehubFlowContext.registerPrefix()` public facade:**
+`callableRegistry()` is package-private. Application code needs a public
+entry point for dispatcher registration:
+
+```java
+public static void registerPrefix(String prefix, CallableDispatcher d) {
+    callableRegistry().registerPrefix(prefix, d);
+}
+```
+
+All three changes are backwards-compatible — existing exact-match
+registrations and callers continue to work unchanged.
 
 ## 4. Case definition changes
 
@@ -488,8 +618,13 @@ Post-processing flow worker:
 - UI for template management (follow-up)
 - LLM template generation prompt engineering (deferred to implementation)
 
-**Cross-repo dependencies:**
-- `casehub-engine-support-core`: `CallableDispatchRegistry.registerPrefix()` — new method
+**Cross-repo dependencies (casehub-engine-support-core):**
+1. `CallableDispatchRegistry.registerPrefix()` — new method for prefix-based dispatch
+2. `CasehubCallableTaskBuilder.init()` — inject `_callName` into args map
+3. `CasehubFlowContext.registerPrefix()` — public facade for dispatcher registration
+4. *(follow-up)* `CaseDefinition.copy()` — proper copy method to replace field-by-field construction
+
+**Resolved dependencies:**
 - `casehub-connectors#174` (ConnectorDocumentApi expansion) — **CLOSED**, dependency satisfied
 
 ## References
