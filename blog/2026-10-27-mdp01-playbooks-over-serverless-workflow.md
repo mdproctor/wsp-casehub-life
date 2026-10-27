@@ -94,8 +94,8 @@ was sealed. `CallableDispatchRegistry` did exact-match lookup only.
 `CasehubFlowContext.callableRegistry()` was package-private. Every
 assumption required breaking an API boundary in a cross-repo
 dependency. The review pushed toward raw SWF as the solution, which
-would have meant writing 38-line YAML blocks for what should be 11
-lines of coordination logic.
+would have meant writing deeply nested YAML for what should be a
+few lines of coordination logic.
 
 The answer had been in the platform all along. CaseHub has a playbook
 language — built during the SC2 build-order work, extended through
@@ -103,15 +103,17 @@ platform #562 and #563. `PlaybookCompiler` compiles playbook YAML into
 the same SWF `Workflow` objects that the SDK-Java executes. Same
 engine, better language.
 
-![Playbook vs SWF 1.0 comparison — 11 lines vs 38 lines for the same behaviour](images/playbook-vs-swf-comparison.svg)
+![Playbook vs SWF 1.0 comparison — steps only, same behaviour](images/playbook-vs-swf-comparison.svg)
 
-The playbook language is strictly more expressive than raw SWF YAML.
-`retry: 3` as an inline decorator vs nested `TryTask → RetryPolicy →
-RetryLimit → RetryLimitAttempt`. `parallel:` for concurrent operations
-vs `fork → branches → do` nesting. `signal:` and `await:` for
-coordination primitives that have no concise SWF equivalent. The
-compilation is additive — everything SWF can express, a playbook can
-express. The reverse isn't true.
+Ignoring metadata preamble on both sides, the step definitions tell
+the story. `retry: 3` is an inline decorator — one line. In SWF, the
+same retry requires a `try:` wrapper, a `catch:` block, a `retry:`
+object, a `limit:` object, and an `attempt:` object with a `count:`
+field. Seven lines of nesting for one concept. `parallel:` for
+concurrent operations vs `fork → branches → do`. `signal:` and
+`await:` for coordination primitives that have no concise SWF
+equivalent. The playbook language is strictly more expressive — the
+compilation is additive, never lossy.
 
 And the architectural payoff: no engine changes at all. Playbooks use
 `rest-request:` steps for connector calls — direct HTTP to the REST
