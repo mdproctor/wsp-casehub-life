@@ -1,139 +1,167 @@
 ---
 layout: post
-title: "Playbooks over Serverless Workflow: why CaseHub's language wins"
+title: "Why your LLM workers shouldn't be making phone calls"
 date: 2026-10-27
-entry_type: note
+entry_type: article
 subtype: diary
 projects: [casehubio/life]
-tags: [playbooks, serverless-workflow, architecture, connector-coordination, design-decision]
+tags: [playbooks, serverless-workflow, architecture, connector-coordination, design-decision, llm-efficiency]
 series: issue-140-playbook-coordination
 ---
 
-# Playbooks over Serverless Workflow: why CaseHub's language wins
+# Why your LLM workers shouldn't be making phone calls
 
-Yesterday I wired four connector SPIs into 18 workers and documented
-the 92 GraphQL operations across 11 domains. The question that came out
-of that sprint was obvious: how do we batch those operations so the LLM
-stops burning tokens on mechanical lookups?
+A home renovation case touches contractors, calendars, documents,
+locations, and finance. In casehub-life, each of those domains has an
+LLM-backed worker — an agent with a system prompt, a response schema,
+and access to connector platform tools via MCP. The worker calls
+`search_contacts` to find the contractor, `search_places` to geocode
+the site, `list_transactions` to pull payment history. Each call is a
+round-trip through the LLM: the model reasons about what to look up,
+formulates the tool call, waits for the result, processes it, and
+moves on.
 
-The answer turned out to be simpler than expected — and it required
-walking into a wall first.
+Every one of those lookups is mechanical. The LLM isn't making a
+judgment call when it searches for "Acme Plumbing" in the contacts
+database. It's doing clerical work at the price of reasoning.
 
-## The wrong wall
+## The connector surface
 
-I started the design session for #140 with what seemed like a reasonable
-architecture: define mechanical coordination as Serverless Workflow
-`do:` blocks, execute them via `FlowWorkerFunction`. The platform
-already had the SWF SDK-Java wired up, `FlowWorkerFunctionProvider`
-handled `do:` blocks from YAML, and `CasehubCallableTaskBuilder` routed
-`call:` steps to dispatchers. Build a `ConnectorCallableDispatcher` to
-bridge `call: casehub:connector/*` to the connector REST APIs, add
-prefix matching to `CallableDispatchRegistry`, inject the call name into
-the args map — three engine changes, a new dispatcher, a new routing
-layer.
+After wiring four connector SPIs last week — ContactsPlatform,
+EmailPlatform, DocumentPlatform, LocationPlatform — casehub-life
+has access to over 100 GraphQL operations across 12 connector
+domains. HealthPlatform, TravelPlatform, and CommercePlatform landed
+the same week. Every operation is exposed two ways: as an MCP tool
+(for LLM workers to call mid-task) and as a REST endpoint via
+`@McpDomain` annotations (for programmatic access).
 
-The decision review caught it. Claude flagged that the "platform
-playbook runtime" I was referencing didn't exist as described — the
-platform's playbook infrastructure was actually the pages/aria content
-system, not a connector-batching engine. The decision reviewer
-verified via code navigation that `PlanItemDefinition` was sealed,
-`CallableDispatchRegistry` did exact-match lookup only, and
-`CasehubFlowContext.callableRegistry()` was package-private. Every
-assumption in the original design required breaking an API boundary.
+| Connector | Key operations |
+|-----------|----------------|
+| Contacts | searchContacts, getContact, createContact |
+| Calendar | listEvents, createEvent, syncEvents |
+| Bank | listAccounts, listTransactions, initiatePayment |
+| Health | searchProviders, searchAvailableSlots, bookAppointment |
+| Documents | uploadFile, searchDocuments, getShareLink |
+| Location | searchPlaces, searchNearby, geocode, directions |
+| Commerce | searchProducts, addToCart, checkout |
+| Travel | searchTransport, searchAccommodation, bookTransport |
+| Messaging | sendSms, sendWhatsApp, sendEmail |
+| Chat | sendChat, messageHistory, replyToMessage |
 
-The review was right about the problems. But it pointed toward raw SWF
-as the solution, and that was the wrong direction too.
+The dual-path architecture means the same operations are available
+for both paths. An LLM worker calling `search_contacts` mid-task is
+making a single lookup. A playbook calling `/api/connectors/contacts/searchContacts`
+over REST is doing the same thing — without an LLM in the loop.
 
-## The right direction was already there
+## The execution model
 
-CaseHub has a playbook language. It's been in the platform since the
-SC2 build-order work — `parallel:`, `concurrent:`, `race:`, `forEach:`,
-`signal:`, `await:`, decorators for `timeout`, `retry`, `when`, `mutex`.
-And `PlaybookCompiler` compiles all of it down to the same SWF `Workflow`
-objects that the SDK-Java executes.
-
-The playbook language is strictly more expressive than raw SWF YAML.
-Everything SWF can express, a playbook can express — the compilation
-is additive, never lossy. But the reverse isn't true: playbook
-coordination primitives (barriers, signals, semaphores in the
-`orchestration:` block), structural decorators, and the concise step
-syntax have no SWF equivalent without verbose nesting.
-
-Here's what a contractor onboarding coordination looks like in both
-formats. Same behaviour. Same compiled output.
-
-![Playbook vs SWF 1.0 comparison — 11 lines vs 38 lines for the same behaviour](images/playbook-vs-swf-comparison.svg)
-
-The playbook is 11 lines. The SWF equivalent is 38. And the gap widens
-with composition — add `parallel:` for concurrent connector calls and
-it's 4 lines vs 17. Add `retry: 3` as an inline decorator vs the nested
-`TryTask → RetryPolicy → RetryLimit → RetryLimitAttempt` structure. The
-playbook language absorbs the ceremony that SWF requires.
-
-## What this means for #140
-
-The architecture simplified dramatically once I stopped thinking in SWF
-and started thinking in playbooks.
+The idea is straightforward. An LLM should plan the coordination, not
+execute it. The judgment call is "what does this situation need?" — which
+playbooks to run, which connectors to hit, what post-processing to do
+after workers finish. The mechanical work — actually calling the APIs,
+batching the results, combining them into a context package — that's
+deterministic. No tokens required.
 
 ![Playbook execution pipeline — authoring format to SWF execution engine](images/playbook-execution-pipeline.svg)
 
-Coordination templates are `.playbook.yaml` files. The planning worker
-(an AgentExec that runs pre-engine) selects or generates them. They use
-`rest-request:` steps for connector calls — direct HTTP to the connector
-REST endpoints, no custom dispatcher needed. `PlaybookCompiler` compiles
-them to `Workflow` objects, `FlowWorkerFunction` wraps them, and
-`FlowWorkerFunctionHandler` executes them via the SWF SDK.
+Four phases, two of which are LLM-free:
 
-No engine changes. No `ConnectorCallableDispatcher`. No prefix matching
-on `CallableDispatchRegistry`. No `_callName` injection. The entire
-Batch 1 of the original implementation plan — three engine modifications
-in a cross-repo dependency — dropped to zero.
+**Phase 1 — Planning.** A coordination worker (AgentExec) assesses the
+incoming request, selects pre-processing and post-processing playbooks
+from a catalog, and writes a `CoordinationPlan` to the case context.
+This is the one LLM call that earns its tokens — it's making decisions
+about what this specific case needs.
 
-What remains is domain work in casehub-life:
+**Phase 2 — Pre-processing.** A playbook runs: search contacts, geocode
+the site, pull recent transactions, check calendar availability. All
+`rest-request:` steps, executed mechanically. The domain worker receives
+a pre-assembled context package and can focus on judgment — "is this
+quote reasonable given the contractor's trust score?" instead of "let me
+look up the contractor first."
 
-- A `CoordinationTemplateCatalog` that merges curated classpath playbooks
-  with LLM-generated runtime playbooks
-- A `CoordinationTemplateValidator` that enforces URL allowlists on
-  generated playbooks
-- 8 curated `.playbook.yaml` templates covering contractor onboarding,
-  appointment prep, financial review, travel research, and post-processing
-  patterns
-- `buildFreshDefinition()` on `LifeTypedCaseHub` that wires
-  `FlowWorkerFunction` workers from compiled playbooks into per-case
-  definitions
-- An extended 5-phase `LifeCaseService.startCase()` — the existing
-  scaffold → CBR retrieval flow gains a planning worker invocation and
-  definition build before engine start
+**Phase 3 — Domain workers.** The existing AgentExec workers, unchanged.
+They still have MCP tool access for in-flight decisions the playbook
+couldn't anticipate. But the routine lookups are already done.
 
-## Playbooks as universal format
+**Phase 4 — Post-processing.** Another playbook: store the completion
+report in DocumentPlatform, email a summary, send a chat notification,
+update the calendar. Sequenced, mechanical, no LLM needed.
 
-SWF 1.0 is a fine execution engine. CaseHub uses it — `PlaybookCompiler`
-targets SWF types, `FlowWorkerFunctionHandler` runs SWF
-`WorkflowApplication`. The standard is doing its job under the hood.
+## Why playbooks, not raw Serverless Workflow
 
-But as an authoring format, SWF YAML is verbose, structural, and
-hostile to the kind of declarative coordination that CaseHub domains
-need. A `rest-request:` with `retry: 3` and `timeout: 10s` is how
-you want to express "call this endpoint, retry three times, give up
-after ten seconds." Not five levels of nested YAML objects.
+This is where the design session got interesting.
 
-CaseHub playbooks compile to SWF. If interop ever matters,
-`PlaybookCompiler` can emit SWF YAML as an export. The reverse doesn't
-work — SWF can't express playbook coordination primitives without the
-verbose structure that the playbook language was designed to eliminate.
+I started with what seemed obvious: define the mechanical work as
+Serverless Workflow `do:` blocks and execute them through the existing
+`FlowWorkerFunction`. The platform already had the CNCF SWF SDK-Java
+wired up. Build a dispatcher to route `call:` steps to connector
+APIs, add some plumbing to the engine — done.
 
-The direction is clear: playbooks everywhere, SWF under the hood. The
-connector coordination work in #140 is the first domain application of
-this, but the pattern applies universally across CaseHub.
+Three problems surfaced during the design review. `PlanItemDefinition`
+was sealed. `CallableDispatchRegistry` did exact-match lookup only.
+`CasehubFlowContext.callableRegistry()` was package-private. Every
+assumption required breaking an API boundary in a cross-repo
+dependency. The review pushed toward raw SWF as the solution, which
+would have meant writing 38-line YAML blocks for what should be 11
+lines of coordination logic.
 
-## What's next
+The answer had been in the platform all along. CaseHub has a playbook
+language — built during the SC2 build-order work, extended through
+platform #562 and #563. `PlaybookCompiler` compiles playbook YAML into
+the same SWF `Workflow` objects that the SDK-Java executes. Same
+engine, better language.
 
-The implementation plan is two batches. First: the coordination types,
-catalog, validator, and 8 curated playbook templates. Second: the case
-integration — `buildFreshDefinition()`, planning worker, and the
-extended case start. No cross-repo changes. The platform already has
-everything we need.
+![Playbook vs SWF 1.0 comparison — 11 lines vs 38 lines for the same behaviour](images/playbook-vs-swf-comparison.svg)
 
-The design doc and plan are at
-`specs/issue-140-playbook-coordination/2026-10-27-playbook-coordination-design.md`
-and `plans/2026-10-27-playbook-coordination.md` in the workspace.
+The playbook language is strictly more expressive than raw SWF YAML.
+`retry: 3` as an inline decorator vs nested `TryTask → RetryPolicy →
+RetryLimit → RetryLimitAttempt`. `parallel:` for concurrent operations
+vs `fork → branches → do` nesting. `signal:` and `await:` for
+coordination primitives that have no concise SWF equivalent. The
+compilation is additive — everything SWF can express, a playbook can
+express. The reverse isn't true.
+
+And the architectural payoff: no engine changes at all. Playbooks use
+`rest-request:` steps for connector calls — direct HTTP to the REST
+endpoints. `PlaybookCompiler` compiles them, `FlowWorkerFunction` wraps
+the result, `FlowWorkerFunctionHandler` executes it. Zero new platform
+SPIs, zero cross-repo modifications.
+
+## Playbook-first, universally
+
+SWF 1.0 is a good execution engine. CaseHub uses it — under the hood,
+invisible. But as an authoring format for domain coordination, it's the
+wrong level of abstraction. You don't want to write `TryTask` with
+`RetryPolicy` when you mean `retry: 3`.
+
+The playbook language exists because build-order coordination, event
+sequencing, and multi-step orchestration all need the same primitives:
+parallel execution, conditional branching, retry with backoff, timeout,
+signals, barriers. The SC2 work needed them. IoT monitoring needs them.
+AML investigation workflows need them. And now connector coordination
+in casehub-life needs them.
+
+If interop matters, `PlaybookCompiler` can emit SWF YAML as an export
+format. The types are the same. But the authoring direction is settled:
+playbooks everywhere, SWF underneath.
+
+## What's being built
+
+The implementation plan has two batches:
+
+**Foundation:** `CoordinationPlan` record, `CoordinationTemplate` JPA
+entity with runtime store, `CoordinationTemplateCatalog` that merges
+curated classpath playbooks with LLM-generated ones,
+`CoordinationTemplateValidator` for security (URL allowlisting on
+generated playbooks), and 8 curated `.playbook.yaml` templates covering
+contractor onboarding, appointment prep, financial review, travel
+research, and three post-processing patterns.
+
+**Case integration:** `buildFreshDefinition()` on `LifeTypedCaseHub`
+that constructs per-case `CaseDefinition` instances with
+`FlowWorkerFunction` workers compiled from the selected playbooks. An
+extended 5-phase `LifeCaseService.startCase()` — the existing scaffold →
+CBR retrieval flow gains a planning worker invocation and definition
+build before engine start.
+
+No cross-repo changes. The platform already has everything this needs.
