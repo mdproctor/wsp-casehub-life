@@ -1,1 +1,1 @@
-# Design Journal — issue-140-playbook-coordination
+# Design Journal — issue-116-household-onboarding
