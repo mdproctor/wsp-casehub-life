@@ -274,24 +274,18 @@ and resolves it from the catalog.
 YAML case definition is parsed once at startup, but the template to
 execute is determined at runtime by the planning worker. Two approaches:
 
-**Option A — Template indirection:** The `FlowWorkerFunction` wraps a
-"meta-workflow" that reads the template name from context, loads it from
-the catalog, and executes it. The SWF `do:` block is a dispatcher, not
-the actual work.
+**Chosen approach — Extended case start:** `LifeCaseService.startCase()`
+runs the planning worker before engine start, reads the `CoordinationPlan`,
+then builds the full case definition with the correct templates wired in.
+This extends the existing three-phase case start (PP-20260529-3ffe28):
 
-**Option B — Two-pass case start:** `LifeCaseService.startCase()` runs
-the planning worker first (Phase 1), reads the `CoordinationPlan`, then
-builds the full case definition with the correct templates wired in
-(Phase 2). This is similar to the existing three-phase case start
-(PP-20260529-3ffe28) where CBR retrieval runs between phases.
-
-Option B is cleaner — the case definition is fully resolved before the
-engine starts executing. It extends the existing three-phase start to
-a four-phase start:
 1. Case definition scaffold (existing Phase 1)
 2. CBR retrieval + adaptation (existing Phase 2)
-3. **Planning worker invocation** — LLM selects templates
+3. **Planning worker invocation** — LLM selects templates (new)
 4. Case definition finalisation with templates wired (existing Phase 3)
+
+The case definition is fully resolved before the engine starts executing.
+No runtime template swapping or meta-workflow indirection needed.
 
 ### 3.6 Component inventory
 
