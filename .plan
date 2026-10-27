@@ -1,0 +1,15 @@
+# Work Plan — issue-140-playbook-coordination
+
+## State
+branch: issue-140-playbook-coordination
+state: scaffolded
+project-sha: 
+date: 
+issue-repo: casehubio/life
+covers: 140
+design-repo: 
+design-section-hashes: 
+flyway-next-v: 
+
+## Queue
+- [ ] casehubio/life#140 — Issue #140 ← active
