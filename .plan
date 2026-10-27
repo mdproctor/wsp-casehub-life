@@ -13,3 +13,15 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/life#140 — Issue #140 ← active
+  - [ ] Batch 1: Engine Prerequisites
+    - [ ] Task 1: CallableDispatchRegistry prefix + call name injection + public facade
+  - [ ] Batch 2: Life Foundation
+    - [ ] Task 2: CoordinationPlan + CoordinationTemplate + catalog
+  - [ ] Batch 3: Connector Dispatcher
+    - [ ] Task 3: ConnectorCallableDispatcher + ConnectorDispatchRouter
+  - [ ] Batch 4: Template Validation
+    - [ ] Task 4: CoordinationTemplateValidator + 8 curated templates
+  - [ ] Batch 5: Case Integration
+    - [ ] Task 5: buildFreshDefinition + planning worker + LifeCaseService extension
+  - [ ] Batch 6: Integration Tests
+    - [ ] Task 6: End-to-end coordination integration test
