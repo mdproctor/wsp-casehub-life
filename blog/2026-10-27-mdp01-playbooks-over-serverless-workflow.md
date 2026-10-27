@@ -139,6 +139,39 @@ If interop matters, `PlaybookCompiler` can emit SWF YAML as an export
 format. The types are the same. But the authoring direction is settled:
 playbooks everywhere, SWF underneath.
 
+## When playbooks fail
+
+The hardest problem isn't playbook generation — it's what happens when
+a generated playbook doesn't work. A connector times out. The contacts
+API returns nothing for a contractor who isn't in the system yet. The
+health provider's booking endpoint expects a different parameter shape
+than the playbook assumed. The playbook runs, produces partial or empty
+results, and the domain worker receives an incomplete context package.
+Worst case: silent failure. The case sits there. Nobody gets notified.
+Nothing happens.
+
+This is where the LLM earns its keep a second time. On playbook failure
+or partial failure, the planning worker gets re-invoked with the failure
+context. It triages: retry with different parameters? Select a different
+playbook? Fall back to letting the domain worker do the lookups via MCP
+tools the old way? The triage is a judgment call — exactly the kind of
+reasoning we're trying to preserve by moving the mechanical work out.
+
+CBR closes the loop. A failed playbook feeds into retention with a
+negative outcome. Next time similar features appear — same contractor,
+same provider type, same domain — the planning worker sees "last time
+the standard playbook failed here, the adapted version added a
+pre-check step." Different interaction points may need different
+playbooks even for the same case type. A contractor who's in the
+contacts database gets the standard onboarding playbook. One who isn't
+gets a playbook that creates the contact first.
+
+The cap is two triage attempts per case start. After that, fall back
+to MCP tools — the domain workers still have their tool access, the
+old way still works. Mechanical coordination is an optimisation, not
+a gate. If playbooks can't handle it, the LLM does it directly. No
+silent failure, no infinite retry loops (#141).
+
 ## What's being built
 
 The implementation plan has two batches:
