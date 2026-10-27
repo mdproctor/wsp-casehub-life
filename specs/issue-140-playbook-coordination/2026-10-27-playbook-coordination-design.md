@@ -26,9 +26,9 @@ is the orchestration layer that batches the programmatic path.
 A four-phase execution model within existing case definitions:
 
 1. **Planning worker** (AgentExec) — LLM selects/generates coordination
-   templates, writes a `CoordinationPlan` to case context
+   playbooks, writes a `CoordinationPlan` to case context
 2. **Pre-processing flow worker** (FlowWorkerFunction) — mechanical
-   connector batches via Serverless Workflow `do:` blocks
+   connector batches via compiled CaseHub playbooks
 3. **Domain workers** (AgentExec, existing) — receive pre-assembled context,
    focus on judgment calls
 4. **Post-processing flow worker** (FlowWorkerFunction) — mechanical
@@ -36,13 +36,17 @@ A four-phase execution model within existing case definitions:
 
 The planning worker runs pre-engine (Phase 3 of Extended case start, §3.5).
 The remaining three phases are steps in the YAML case definition. No new
-engine PlanItem types, no new platform SPIs. The architecture composes
-entirely with existing primitives:
+engine PlanItem types, no new platform SPIs, no engine changes at all.
 
-- `FlowWorkerFunction` (casehub-engine-support-core, package `io.casehub.engine.flow`) — executes SWF `do:` blocks
-- `FlowWorkerFunctionProvider` — resolves `do:` blocks from YAML
-- `CasehubCallableTaskBuilder` — routes SWF `call:` steps to dispatchers
-- `CallableDispatchRegistry` — maps call names to `CallableDispatcher` impls (requires prefix-match enhancement — see §3.2)
+**Execution pipeline:** Playbook YAML → `PlaybookCompiler.compile()` →
+`Workflow` → `FlowWorkerFunction` → `FlowWorkerFunctionHandler` (SWF
+SDK-Java). Playbooks are the authoring format; SWF 1.0 is the execution
+engine. This is the universal CaseHub pattern — playbooks everywhere,
+SWF under the hood.
+
+Connector operations use `rest-request:` steps pointing at connector
+REST endpoints (`/api/connectors/{domain}/{operation}`). No
+`CallableDispatcher` needed — playbooks make HTTP calls directly.
 
 ## 3. Architecture
 
@@ -83,76 +87,31 @@ what the engine receives, not the YAML file content):
     call: casehub:connector/messaging/sendEmail
 ```
 
-### 3.2 ConnectorCallableDispatcher
+### 3.2 Connector operations via rest-request: steps
 
-A single `CallableDispatcher` implementation registered in
-`CallableDispatchRegistry` at startup. Routes SWF `call:` steps
-to connector REST APIs.
+No custom dispatcher needed. Playbook `rest-request:` steps call connector
+REST endpoints directly:
 
-**Call name convention:** `casehub:connector/{domain}/{operation}`
-
-Examples:
-- `casehub:connector/contacts/searchContacts`
-- `casehub:connector/health/searchProviders`
-- `casehub:connector/documents/uploadFile`
-- `casehub:connector/bank/listTransactions`
-
-**Resolution:** The dispatcher extracts the call name from `args.get("_callName")`
-(injected by the engine's `CasehubCallableTaskBuilder` — see §3.8), parses
-it into domain and operation segments, and constructs the REST path using a
-static domain-to-basePath mapping table.
-
-```java
-@ApplicationScoped
-public class ConnectorCallableDispatcher implements CallableDispatcher {
-
-    @Inject ConnectorDispatchRouter router;
-
-    @Override
-    public CompletableFuture<Map<String, Object>> dispatch(
-            String workflowInstanceId, Map<String, Object> args) {
-        String callName = (String) args.get("_callName");
-        // callName = "casehub:connector/contacts/searchContacts"
-        String[] parts = callName.split("/", 3);
-        // parts = ["casehub:connector", "contacts", "searchContacts"]
-        String domain = parts[1];
-        String operation = parts[2];
-        Map<String, Object> params = new HashMap<>(args);
-        params.remove("_callName");
-        return router.invoke(domain, operation, params);
-    }
-}
+```yaml
+steps:
+  - rest-request:
+      method: GET
+      url: /api/connectors/contacts/searchContacts?query=${input.contractorName}
+    timeout: 10s
+    retry: 3
 ```
 
-The `ConnectorDispatchRouter` resolves domain → connector REST endpoint
-using a static domain-to-basePath mapping table. The connector REST/GraphQL
-APIs (in `casehub-connectors`) are deployed in the same Quarkus application
-as life — invocation is local HTTP to `localhost:{port}/api/connectors/{domain}/{operation}`.
-The `@McpDomain` annotations on connector API classes are in the connectors
-repo (not on life's compile classpath), so discovery uses a static map rather
-than runtime annotation scanning.
-
-**Registration lifecycle:** `CasehubFlowContext.init()` is called by the
-engine framework at bootstrap, creating the `CallableDispatchRegistry`
-instance. `CasehubFlowContext.callableRegistry()` is package-private
-(`io.casehub.engine.flow`), so application code cannot call it directly.
-Registration uses a new public facade on `CasehubFlowContext`:
-
-```java
-// Engine-level addition to CasehubFlowContext (casehub-engine-support-core)
-public static void registerPrefix(String prefix, CallableDispatcher d) {
-    callableRegistry().registerPrefix(prefix, d);
-}
-```
-
-`ConnectorCallableDispatcher` registers via a CDI `@Observes StartupEvent`
-observer that calls `CasehubFlowContext.registerPrefix("casehub:connector/", this)`.
-This requires three engine-level changes listed in §3.8.
+`PlaybookCompiler` compiles this to a `CallHTTP` task in the SWF `Workflow`.
+`FlowWorkerFunctionHandler` executes it. The connector REST APIs (deployed
+in the same Quarkus application via `@McpDomain` annotations) handle the
+request. No `CallableDispatcher`, no `ConnectorDispatchRouter`, no engine
+changes.
 
 ### 3.3 Coordination template catalog
 
-**Purpose:** A library of reusable `do:` block templates that the planning
-worker can select from. Templates are domain-specific coordination recipes.
+**Purpose:** A library of reusable `.playbook.yaml` templates that the
+planning worker can select from. Templates are domain-specific coordination
+recipes authored in the CaseHub playbook language.
 
 **Storage — two tiers:**
 
@@ -177,7 +136,7 @@ public class CoordinationTemplate {
     @Id UUID id;
     String name;           // "contractor-onboarding"
     String domain;         // "contractor-coordination"
-    String templateYaml;   // SWF do: block YAML
+    String templateYaml;   // Playbook YAML
     String description;    // LLM-generated description
     boolean curated;       // false for runtime, true for promoted
     Instant createdAt;
@@ -194,26 +153,23 @@ public class CoordinationTemplateCatalog {
     Optional<CoordinationTemplate> findByName(String name);
     void save(CoordinationTemplate template);  // runtime store
 
-    /** Resolve a template name to a parsed SWF Workflow. */
+    /** Resolve a template name to a compiled SWF Workflow. */
     Workflow resolveToWorkflow(String templateName) {
         CoordinationTemplate t = findByName(templateName)
             .orElseThrow(() -> new IllegalArgumentException(
                 "Unknown template: " + templateName));
-        return parseTemplateYaml(t.templateYaml());
+        return compilePlaybook(t.getTemplateYaml());
     }
 
-    /** Parse a do: block YAML string into a Workflow. */
-    static Workflow parseTemplateYaml(String templateYaml) {
-        // Wrap bare do: block with SWF document header
-        ObjectNode doc = MAPPER.createObjectNode();
-        doc.putObject("document")
-           .put("dsl", "1.0.0")
-           .put("name", "template")
-           .put("namespace", "life")
-           .put("version", "1.0.0");
-        doc.set("do", MAPPER.readTree(templateYaml).get("do"));
-        return WorkflowReader.readWorkflowFromString(
-            MAPPER.writeValueAsString(doc), WorkflowFormat.YAML);
+    /** Compile playbook YAML into a Workflow via PlaybookCompiler. */
+    static Workflow compilePlaybook(String playbookYaml) {
+        PlaybookDocument doc = PlaybookDocument.parse(playbookYaml);
+        CompilationOutcome outcome = new PlaybookCompiler().compile(doc);
+        if (outcome instanceof CompilationOutcome.Failure f) {
+            throw new IllegalArgumentException(
+                "Playbook compilation failed: " + f.diagnostics());
+        }
+        return ((CompilationOutcome.Success) outcome).result().workflow();
     }
 }
 ```
@@ -453,8 +409,8 @@ definition-build time. No runtime template swapping or TOCTOU race.
 
 | Component | Module | New/Existing |
 |-----------|--------|-------------|
-| `ConnectorCallableDispatcher` | app/ | New — routes `call: casehub:connector/*` to REST |
-| `ConnectorDispatchRouter` | app/ | New — resolves domain/operation to REST path |
+| ~~`ConnectorCallableDispatcher`~~ | ~~app/~~ | ~~Removed — rest-request: steps call connector APIs directly~~ |
+| ~~`ConnectorDispatchRouter`~~ | ~~app/~~ | ~~Removed — no routing needed~~ |
 | `CoordinationTemplate` | app/ | New — JPA entity for runtime templates |
 | `CoordinationTemplateCatalog` | app/ | New — unified query over classpath + runtime |
 | `CoordinationTemplateValidator` | app/ | New — allowlist + structural validation for generated templates |
@@ -464,7 +420,7 @@ definition-build time. No runtime template swapping or TOCTOU race.
 | Classpath templates | resources/life/templates/ | New — curated `do:` block YAML files |
 | `FlowWorkerFunction` | casehub-engine-support-core | Existing — SWF execution |
 | `FlowWorkerFunctionProvider` | casehub-engine-support-core | Existing — `do:` block parsing |
-| `CallableDispatchRegistry` | casehub-engine-support-core | Existing — dispatcher routing (needs `registerPrefix()`) |
+| `PlaybookCompiler` | casehub-platform-playbook-compiler | Existing — compiles playbook YAML → SWF Workflow |
 | `CasehubCallableTaskBuilder` | casehub-engine-support-core | Existing — SWF `call:` routing |
 | `CbrInputTransformer` | app/cbr/ | Existing — CBR context injection |
 
@@ -478,68 +434,25 @@ One new migration for the runtime template store:
 
 Note: V113 is taken by `V113__household_and_members.sql`.
 
-### 3.8 Engine-level dependency: CallableDispatchRegistry prefix matching
+### 3.8 Dependencies
 
-`FlowWorkerFunction`, `FlowWorkerFunctionProvider`, `FlowWorkerFunctionHandler`,
-`CasehubCallableTaskBuilder`, `CallableDispatcher`, and `CallableDispatchRegistry`
-are all in `casehub-engine-support-core` (artifact `casehub-engine-support-core`,
-package `io.casehub.engine.flow`). This artifact is already a transitive
-dependency via `casehub-engine` in `app/pom.xml`. No new dependency needed.
+`PlaybookCompiler` is in `casehub-platform-playbook-compiler`. Add to
+`app/pom.xml`:
 
-**Three required engine changes** in `casehub-engine-support-core`:
-
-**Change 1 — `CallableDispatchRegistry.registerPrefix()`:** The registry
-currently uses `ConcurrentHashMap.get()` for exact-match lookup only.
-Add prefix-based dispatch:
-
-```java
-public void registerPrefix(String prefix, CallableDispatcher dispatcher) {
-    prefixDispatchers.put(prefix, dispatcher);
-}
-
-public CallableDispatcher get(final String callName) {
-    CallableDispatcher d = dispatchers.get(callName);
-    if (d != null) return d;
-    for (var entry : prefixDispatchers.entrySet()) {
-        if (callName.startsWith(entry.getKey())) return entry.getValue();
-    }
-    throw new UnsupportedOperationException("No dispatcher for: " + callName);
-}
+```xml
+<dependency>
+    <groupId>io.casehub</groupId>
+    <artifactId>casehub-platform-playbook-compiler</artifactId>
+</dependency>
 ```
 
-**Change 2 — `CasehubCallableTaskBuilder` call name injection:** The
-current `init()` method passes only `with:` params to `dispatch()`. The
-dispatcher needs the call name to determine domain/operation. Inject it:
+`FlowWorkerFunction` and `FlowWorkerFunctionHandler` are in
+`casehub-engine-support-core`, already a transitive dependency via
+`casehub-engine`.
 
-```java
-public CallableTaskFactory init(CallFunction task, ...) {
-    String callName = task.getCall();
-    Map<String, Object> baseArgs = task.getWith() != null
-        ? task.getWith().getAdditionalProperties() : Map.of();
-    Map<String, Object> enrichedArgs = new HashMap<>(baseArgs);
-    enrichedArgs.put("_callName", callName);
-    return () -> (wfCtx, taskCtx, input) -> {
-        String instanceId = wfCtx.instanceData().id();
-        return callableRegistry().get(callName)
-            .dispatch(instanceId, enrichedArgs)
-            .thenApply(out -> wfCtx.definition().application()
-                .modelFactory().from(out));
-    };
-}
-```
-
-**Change 3 — `CasehubFlowContext.registerPrefix()` public facade:**
-`callableRegistry()` is package-private. Application code needs a public
-entry point for dispatcher registration:
-
-```java
-public static void registerPrefix(String prefix, CallableDispatcher d) {
-    callableRegistry().registerPrefix(prefix, d);
-}
-```
-
-All three changes are backwards-compatible — existing exact-match
-registrations and callers continue to work unchanged.
+**No engine changes needed.** Playbook `rest-request:` steps compile to
+SWF `CallHTTP` tasks. The SWF SDK-Java executes them directly as HTTP
+calls. No `CallableDispatcher`, no prefix matching, no call name injection.
 
 ## 4. Case definition changes
 
@@ -640,13 +553,12 @@ Post-processing flow worker:
 ## 7. Scope boundaries
 
 **In scope:**
-- ConnectorCallableDispatcher + ConnectorDispatchRouter
 - CoordinationTemplate entity + catalog + CoordinationTemplateValidator
 - CoordinationPlan record + planning worker prompt
-- Curated templates (8 initial)
+- Curated playbook templates (8 initial `.playbook.yaml` files)
 - Pre/post flow workers in 6 case definitions
 - Flyway migration for template store (V114)
-- CallableDispatchRegistry prefix-match enhancement (engine-level, casehub-engine-support-core)
+- casehub-platform-playbook-compiler dependency
 
 **Out of scope:**
 - **Case mapping** — LLM pre-maps which CasePlanModels to start with what
@@ -660,11 +572,10 @@ Post-processing flow worker:
 - UI for template management (follow-up)
 - LLM template generation prompt engineering (deferred to implementation)
 
-**Cross-repo dependencies (casehub-engine-support-core):**
-1. `CallableDispatchRegistry.registerPrefix()` — new method for prefix-based dispatch
-2. `CasehubCallableTaskBuilder.init()` — inject `_callName` into args map
-3. `CasehubFlowContext.registerPrefix()` — public facade for dispatcher registration
-4. *(follow-up)* `CaseDefinition.copy()` — proper copy method to replace field-by-field construction
+**Cross-repo dependencies:**
+- `casehub-platform-playbook-compiler` — PlaybookCompiler (existing, no changes)
+- `casehub-engine-support-core` — FlowWorkerFunction, FlowWorkerFunctionHandler (existing, no changes)
+- *(follow-up)* `CaseDefinition.copy()` in `casehub-engine-api` — proper copy method to replace field-by-field construction
 
 **Resolved dependencies:**
 - `casehub-connectors#174` (ConnectorDocumentApi expansion) — **CLOSED**, dependency satisfied
