@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" font-family="'SF Mono', 'Fira Code', 'Consolas', monospace">
+  <defs>
+    <linearGradient id="pbGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ecfdf5"/>
+      <stop offset="100%" stop-color="#d1fae5"/>
+    </linearGradient>
+    <linearGradient id="swfGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef2f2"/>
+      <stop offset="100%" stop-color="#fee2e2"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="720" height="420" rx="8" fill="#f8fafc"/>
+
+  <!-- Playbook side -->
+  <rect x="15" y="10" width="340" height="400" rx="8" fill="url(#pbGrad)" stroke="#10b981" stroke-width="1.5"/>
+  <text x="185" y="35" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46" font-family="system-ui, sans-serif">CaseHub Playbook</text>
+  <text x="185" y="52" text-anchor="middle" font-size="10" fill="#047857" font-family="system-ui, sans-serif">11 lines</text>
+
+  <!-- Playbook code -->
+  <text x="30" y="78" font-size="9" fill="#6b7280">steps:</text>
+  <text x="30" y="96" font-size="9" fill="#6b7280">  - rest-request:</text>
+  <text x="30" y="114" font-size="9" fill="#6b7280">      method: GET</text>
+  <text x="30" y="132" font-size="9" fill="#1f2937">      url: <tspan fill="#059669">/api/.../searchContacts</tspan></text>
+  <text x="30" y="150" font-size="9" fill="#d97706">    timeout: 10s</text>
+  <text x="30" y="168" font-size="9" fill="#dc2626">    retry: 3</text>
+  <text x="30" y="196" font-size="9" fill="#6b7280">  - rest-request:</text>
+  <text x="30" y="214" font-size="9" fill="#6b7280">      method: GET</text>
+  <text x="30" y="232" font-size="9" fill="#1f2937">      url: <tspan fill="#059669">/api/.../searchPlaces</tspan></text>
+  <text x="30" y="250" font-size="9" fill="#d97706">    timeout: 10s</text>
+
+  <!-- Annotation arrows -->
+  <rect x="40" y="280" width="280" height="55" rx="6" fill="white" stroke="#10b981" stroke-width="1" opacity="0.9"/>
+  <text x="55" y="298" font-size="10" fill="#065f46" font-family="system-ui, sans-serif" font-weight="600">Decorators are inline modifiers.</text>
+  <text x="55" y="314" font-size="9" fill="#047857" font-family="system-ui, sans-serif">timeout: and retry: sit alongside the step.</text>
+  <text x="55" y="328" font-size="9" fill="#047857" font-family="system-ui, sans-serif">PlaybookCompiler generates the nesting.</text>
+
+  <!-- Vertical divider -->
+  <line x1="360" y1="20" x2="360" y2="400" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,4"/>
+
+  <!-- SWF side -->
+  <rect x="365" y="10" width="340" height="400" rx="8" fill="url(#swfGrad)" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="535" y="35" text-anchor="middle" font-size="13" font-weight="700" fill="#991b1b" font-family="system-ui, sans-serif">Serverless Workflow 1.0</text>
+  <text x="535" y="52" text-anchor="middle" font-size="10" fill="#b91c1c" font-family="system-ui, sans-serif">38 lines (same behaviour)</text>
+
+  <!-- SWF code (abbreviated) -->
+  <text x="380" y="78" font-size="8" fill="#6b7280">document:</text>
+  <text x="380" y="92" font-size="8" fill="#6b7280">  dsl: "1.0.0"</text>
+  <text x="380" y="106" font-size="8" fill="#6b7280">  namespace: life</text>
+  <text x="380" y="120" font-size="8" fill="#6b7280">  name: contractor-onboarding</text>
+  <text x="380" y="134" font-size="8" fill="#6b7280">  version: "1.0.0"</text>
+  <text x="380" y="148" font-size="8" fill="#6b7280">do:</text>
+  <text x="380" y="162" font-size="8" fill="#6b7280">  - search-contacts:</text>
+  <text x="380" y="176" font-size="8" fill="#dc2626">      try:</text>
+  <text x="380" y="190" font-size="8" fill="#dc2626">        - search-contacts-inner:</text>
+  <text x="380" y="204" font-size="8" fill="#6b7280">            call: http</text>
+  <text x="380" y="218" font-size="8" fill="#6b7280">            with:</text>
+  <text x="380" y="232" font-size="8" fill="#6b7280">              method: GET</text>
+  <text x="380" y="246" font-size="8" fill="#6b7280">              endpoint:</text>
+  <text x="380" y="260" font-size="8" fill="#059669">                uri: /api/.../search...</text>
+  <text x="380" y="274" font-size="8" fill="#d97706">            timeout:</text>
+  <text x="380" y="288" font-size="8" fill="#d97706">              after: PT10S</text>
+  <text x="380" y="302" font-size="8" fill="#dc2626">      catch:</text>
+  <text x="380" y="316" font-size="8" fill="#dc2626">        retry:</text>
+  <text x="380" y="330" font-size="8" fill="#dc2626">          limit:</text>
+  <text x="380" y="344" font-size="8" fill="#dc2626">            attempt:</text>
+  <text x="380" y="358" font-size="8" fill="#dc2626">              count: 3</text>
+  <text x="380" y="376" font-size="8" fill="#6b7280">  ...</text>
+  <text x="380" y="390" font-size="8" fill="#94a3b8" font-style="italic">(+ 20 more lines)</text>
+</svg>
