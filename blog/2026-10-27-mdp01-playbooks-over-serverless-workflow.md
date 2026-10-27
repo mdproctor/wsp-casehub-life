@@ -25,6 +25,8 @@ Every one of those lookups is mechanical. The LLM isn't making a
 judgment call when it searches for "Acme Plumbing" in the contacts
 database. It's doing clerical work at the price of reasoning.
 
+![Before and after — LLM round-trips vs playbook pre-staging](images/worker-before-after.svg)
+
 ## The connector surface
 
 After wiring four connector SPIs last week — ContactsPlatform,
@@ -35,18 +37,8 @@ the same week. Every operation is exposed two ways: as an MCP tool
 (for LLM workers to call mid-task) and as a REST endpoint via
 `@McpDomain` annotations (for programmatic access).
 
-| Connector | Key operations |
-|-----------|----------------|
-| Contacts | searchContacts, getContact, createContact |
-| Calendar | listEvents, createEvent, syncEvents |
-| Bank | listAccounts, listTransactions, initiatePayment |
-| Health | searchProviders, searchAvailableSlots, bookAppointment |
-| Documents | uploadFile, searchDocuments, getShareLink |
-| Location | searchPlaces, searchNearby, geocode, directions |
-| Commerce | searchProducts, addToCart, checkout |
-| Travel | searchTransport, searchAccommodation, bookTransport |
-| Messaging | sendSms, sendWhatsApp, sendEmail |
-| Chat | sendChat, messageHistory, replyToMessage |
+
+![The connector surface — 12 domains, 100+ operations, two access paths](images/connector-surface.svg)
 
 The dual-path architecture means the same operations are available
 for both paths. An LLM worker calling `search_contacts` mid-task is
