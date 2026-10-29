@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-140-playbook-coordination
-state: active
+state: closing:review
 project-sha: 
 date: 
 issue-repo: casehubio/life
@@ -11,9 +11,10 @@ design-repo:
 design-section-hashes: 
 flyway-next-v: 
 
+evidence-era: true
 ## Queue
 - [ ] casehubio/life#140 — Issue #140 ← active
-  - [ ] Batch 1: Foundation
-    - [ ] Task 1: CoordinationPlan + CoordinationTemplate + catalog + playbooks + validator
-  - [ ] Batch 2: Case Integration
-    - [ ] Task 2: buildFreshDefinition + planning worker + LifeCaseService extension
+  - [x] Batch 1: Foundation
+    - [x] Task 1: CoordinationPlan + CoordinationTemplate + catalog + playbooks + validator
+  - [x] Batch 2: Case Integration
+    - [x] Task 2: buildFreshDefinition + planning worker + LifeCaseService extension
