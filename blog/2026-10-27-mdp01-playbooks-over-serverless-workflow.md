@@ -188,6 +188,8 @@ The key method is `resolveToPlaybookWorker()` — it takes a template name,
 compiles the playbook YAML via `PlaybookCompiler`, and returns a
 `PlaybookWorkerFunction` ready to wire into a case definition.
 
+![Catalog resolution pipeline — from template name to engine-ready worker function](images/catalog-resolution-pipeline.svg)
+
 The catalog parses the 3-document YAML format (front matter, metadata,
 steps) using SnakeYAML directly, extracting `meta.domain` and
 `meta.description` for catalog queries. I avoided pulling in
@@ -201,11 +203,7 @@ must have a `steps:` block and must compile successfully. A generated
 playbook that fails validation falls back to MCP tool calls — the
 domain workers still have their tool access.
 
-The 8 curated playbook templates cover:
-- **Pre-processing:** contractor onboarding, appointment prep, site
-  assessment, financial review prep, travel research
-- **Post-processing:** completion report, appointment follow-up,
-  payment and close
+![8 curated playbook templates — pre and post-processing](images/template-library.svg)
 
 ## What surfaced during implementation
 
