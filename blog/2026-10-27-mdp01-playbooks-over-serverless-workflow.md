@@ -252,8 +252,19 @@ planning worker fails, the service falls back to the base definition.
 No coordination, no error — the domain workers still have their MCP
 tools.
 
-The follow-up issues are open: playbook failure triage (#141),
-generic platform failure handling (platform#668), and the
-`RestRequestCompiler` URI template fix (platform#675). None are
-blockers — the foundation works now, and the system degrades
-gracefully when playbooks fail.
+The platform dependencies landed the same week. `RestRequestCompiler`
+now handles URI templates with expression variables (platform#675) —
+the POST workaround in the curated templates can be replaced with
+natural GET-with-params syntax. The playbook execution feedback loop
+(platform#668) provides `PlaybookExecutionResult`,
+`PlaybookTriageDispatcher`, and `PlaybookOutcomeRecorder` — the
+generic infrastructure that life#141 will wire for failure triage and
+CBR-driven adaptive recovery.
+
+![The full pipeline — from playbook authoring to adaptive recovery](images/full-coordination-pipeline.svg)
+
+What remains is life-specific: wiring the failure triage (#141),
+updating templates to use GET params now that the compiler supports
+them, and integrating CommercePlatform (#135) and BankPlatform PISP
+(#136) — which aren't template tweaks but new case definitions with
+oversight gates and risk classification.

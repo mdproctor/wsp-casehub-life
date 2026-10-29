@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="fa" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#475569"/>
+    </marker>
+    <marker id="fb" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#dc2626"/>
+    </marker>
+    <linearGradient id="lg1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#818cf8"/><stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="lg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="lg3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f87171"/><stop offset="100%" stop-color="#ef4444"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="720" height="400" rx="8" fill="#f8fafc"/>
+  <text x="360" y="24" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">Full Coordination Pipeline — authoring to adaptive recovery</text>
+
+  <!-- Row 1: Case Start Flow -->
+  <text x="20" y="52" font-size="9" font-weight="600" fill="#64748b">CASE START (5-PHASE)</text>
+
+  <rect x="20" y="62" width="95" height="50" rx="6" fill="#e0e7ff" stroke="#6366f1" stroke-width="1"/>
+  <text x="67" y="82" text-anchor="middle" font-size="9" font-weight="600" fill="#3730a3">Phase 1-2</text>
+  <text x="67" y="96" text-anchor="middle" font-size="8" fill="#4f46e5">Scaffold + CBR</text>
+
+  <line x1="115" y1="87" x2="135" y2="87" stroke="#475569" stroke-width="1.5" marker-end="url(#fa)"/>
+
+  <rect x="140" y="62" width="110" height="50" rx="6" fill="url(#lg1)" opacity="0.9"/>
+  <text x="195" y="82" text-anchor="middle" font-size="9" font-weight="600" fill="white">Phase 3</text>
+  <text x="195" y="96" text-anchor="middle" font-size="8" fill="white" opacity="0.85">Planning Worker</text>
+
+  <line x1="250" y1="87" x2="270" y2="87" stroke="#475569" stroke-width="1.5" marker-end="url(#fa)"/>
+
+  <rect x="275" y="62" width="120" height="50" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+  <text x="335" y="82" text-anchor="middle" font-size="9" font-weight="600" fill="#92400e">Phase 4</text>
+  <text x="335" y="96" text-anchor="middle" font-size="8" fill="#b45309">buildFreshDefinition</text>
+
+  <line x1="395" y1="87" x2="415" y2="87" stroke="#475569" stroke-width="1.5" marker-end="url(#fa)"/>
+
+  <rect x="420" y="62" width="100" height="50" rx="6" fill="#e0e7ff" stroke="#6366f1" stroke-width="1"/>
+  <text x="470" y="82" text-anchor="middle" font-size="9" font-weight="600" fill="#3730a3">Phase 5</text>
+  <text x="470" y="96" text-anchor="middle" font-size="8" fill="#4f46e5">Engine Start</text>
+
+  <!-- Row 2: Execution Flow -->
+  <text x="20" y="140" font-size="9" font-weight="600" fill="#64748b">EXECUTION</text>
+
+  <rect x="20" y="150" width="130" height="50" rx="6" fill="url(#lg2)" opacity="0.9"/>
+  <text x="85" y="170" text-anchor="middle" font-size="9" font-weight="600" fill="white">Pre-Processing</text>
+  <text x="85" y="184" text-anchor="middle" font-size="8" fill="white" opacity="0.85">Playbook → rest-request:</text>
+
+  <line x1="150" y1="175" x2="170" y2="175" stroke="#475569" stroke-width="1.5" marker-end="url(#fa)"/>
+
+  <rect x="175" y="150" width="130" height="50" rx="6" fill="url(#lg1)" opacity="0.9"/>
+  <text x="240" y="170" text-anchor="middle" font-size="9" font-weight="600" fill="white">Domain Workers</text>
+  <text x="240" y="184" text-anchor="middle" font-size="8" fill="white" opacity="0.85">LLM judgment calls</text>
+
+  <line x1="305" y1="175" x2="325" y2="175" stroke="#475569" stroke-width="1.5" marker-end="url(#fa)"/>
+
+  <rect x="330" y="150" width="130" height="50" rx="6" fill="url(#lg2)" opacity="0.9"/>
+  <text x="395" y="170" text-anchor="middle" font-size="9" font-weight="600" fill="white">Post-Processing</text>
+  <text x="395" y="184" text-anchor="middle" font-size="8" fill="white" opacity="0.85">Playbook → notify/store</text>
+
+  <!-- Row 3: Compilation Pipeline (compact) -->
+  <text x="20" y="230" font-size="9" font-weight="600" fill="#64748b">COMPILATION</text>
+
+  <rect x="20" y="240" width="85" height="38" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+  <text x="62" y="257" text-anchor="middle" font-size="8" font-weight="600" fill="#92400e">.playbook.yaml</text>
+  <text x="62" y="270" text-anchor="middle" font-size="7" fill="#b45309">authoring format</text>
+
+  <line x1="105" y1="259" x2="125" y2="259" stroke="#475569" stroke-width="1" marker-end="url(#fa)"/>
+
+  <rect x="130" y="240" width="90" height="38" rx="5" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/>
+  <text x="175" y="257" text-anchor="middle" font-size="8" font-weight="600" fill="#1e40af">Playbook</text>
+  <text x="175" y="270" text-anchor="middle" font-size="7" fill="#3b82f6">Compiler</text>
+
+  <line x1="220" y1="259" x2="240" y2="259" stroke="#475569" stroke-width="1" marker-end="url(#fa)"/>
+
+  <rect x="245" y="240" width="110" height="38" rx="5" fill="#d1fae5" stroke="#10b981" stroke-width="1"/>
+  <text x="300" y="257" text-anchor="middle" font-size="8" font-weight="600" fill="#065f46">PlaybookWorker</text>
+  <text x="300" y="270" text-anchor="middle" font-size="7" fill="#047857">Function</text>
+
+  <line x1="355" y1="259" x2="375" y2="259" stroke="#475569" stroke-width="1" marker-end="url(#fa)"/>
+
+  <rect x="380" y="240" width="80" height="38" rx="5" fill="#e0e7ff" stroke="#6366f1" stroke-width="1"/>
+  <text x="420" y="257" text-anchor="middle" font-size="8" font-weight="600" fill="#3730a3">SWF SDK</text>
+  <text x="420" y="270" text-anchor="middle" font-size="7" fill="#4f46e5">execution</text>
+
+  <!-- Row 4: Failure Recovery Loop -->
+  <text x="20" y="310" font-size="9" font-weight="600" fill="#991b1b">FAILURE RECOVERY (platform#668)</text>
+
+  <rect x="20" y="320" width="130" height="50" rx="6" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="85" y="340" text-anchor="middle" font-size="9" font-weight="600" fill="#991b1b">Execution Result</text>
+  <text x="85" y="354" text-anchor="middle" font-size="8" fill="#b91c1c">success / partial / fail</text>
+
+  <line x1="150" y1="345" x2="170" y2="345" stroke="#dc2626" stroke-width="1.5" marker-end="url(#fb)"/>
+
+  <rect x="175" y="320" width="130" height="50" rx="6" fill="#fef2f2" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="240" y="340" text-anchor="middle" font-size="9" font-weight="600" fill="#991b1b">Triage Dispatcher</text>
+  <text x="240" y="354" text-anchor="middle" font-size="8" fill="#b91c1c">LLM re-plans or fallback</text>
+
+  <line x1="305" y1="345" x2="325" y2="345" stroke="#dc2626" stroke-width="1.5" marker-end="url(#fb)"/>
+
+  <rect x="330" y="320" width="130" height="50" rx="6" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="395" y="340" text-anchor="middle" font-size="9" font-weight="600" fill="#991b1b">Outcome Recorder</text>
+  <text x="395" y="354" text-anchor="middle" font-size="8" fill="#b91c1c">CBR retention → adapt</text>
+
+  <!-- CBR feedback arrow back to Phase 3 -->
+  <path d="M460,345 L490,345 L490,55 L195,55 L195,62" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,3" fill="none" marker-end="url(#fb)"/>
+  <text x="500" y="200" font-size="7" fill="#dc2626" transform="rotate(90, 500, 200)">CBR feedback loop</text>
+
+  <!-- Legend -->
+  <rect x="520" y="145" width="180" height="135" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="530" y="164" font-size="9" font-weight="600" fill="#1e293b">Legend</text>
+  <rect x="530" y="174" width="12" height="12" rx="2" fill="url(#lg1)"/>
+  <text x="548" y="184" font-size="8" fill="#475569">LLM reasoning</text>
+  <rect x="530" y="194" width="12" height="12" rx="2" fill="url(#lg2)"/>
+  <text x="548" y="204" font-size="8" fill="#475569">Mechanical (playbook)</text>
+  <rect x="530" y="214" width="12" height="12" rx="2" fill="#fef3c7" stroke="#f59e0b" stroke-width="0.5"/>
+  <text x="548" y="224" font-size="8" fill="#475569">Template / config</text>
+  <rect x="530" y="234" width="12" height="12" rx="2" fill="#fef2f2" stroke="#fca5a5" stroke-width="0.5"/>
+  <text x="548" y="244" font-size="8" fill="#475569">Failure recovery</text>
+  <line x1="530" y1="260" x2="555" y2="260" stroke="#dc2626" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="560" y="264" font-size="8" fill="#475569">CBR feedback</text>
+
+  <text x="360" y="393" text-anchor="middle" font-size="9" fill="#64748b" font-style="italic">Playbooks author. SWF executes. CBR adapts. The LLM plans and triages — everything else is mechanical.</text>
+</svg>
