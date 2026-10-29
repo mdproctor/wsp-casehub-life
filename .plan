@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-140-playbook-coordination
-state: closing:verified
+state: closing:promoted
 project-sha: 
 date: 
 issue-repo: casehubio/life
