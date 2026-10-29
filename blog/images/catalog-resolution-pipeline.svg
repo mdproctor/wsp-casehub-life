@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 260" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="a1" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <rect width="720" height="260" rx="8" fill="#f8fafc"/>
+  <text x="360" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">Template Resolution — from name to engine-ready worker</text>
+
+  <!-- Step 1: Template Name -->
+  <rect x="20" y="50" width="110" height="55" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="75" y="72" text-anchor="middle" font-size="10" font-weight="600" fill="#92400e">Template Name</text>
+  <text x="75" y="90" text-anchor="middle" font-size="8" fill="#b45309" font-style="italic">"contractor-</text>
+  <text x="75" y="100" text-anchor="middle" font-size="8" fill="#b45309" font-style="italic">onboarding"</text>
+
+  <line x1="130" y1="77" x2="155" y2="77" stroke="#475569" stroke-width="1.5" marker-end="url(#a1)"/>
+
+  <!-- Step 2: Catalog Lookup -->
+  <rect x="160" y="50" width="110" height="55" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="215" y="72" text-anchor="middle" font-size="10" font-weight="600" fill="#1e40af">Catalog</text>
+  <text x="215" y="87" text-anchor="middle" font-size="8" fill="#3b82f6">classpath first</text>
+  <text x="215" y="99" text-anchor="middle" font-size="8" fill="#3b82f6">then database</text>
+
+  <line x1="270" y1="77" x2="295" y2="77" stroke="#475569" stroke-width="1.5" marker-end="url(#a1)"/>
+
+  <!-- Step 3: YAML -->
+  <rect x="300" y="50" width="100" height="55" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="350" y="72" text-anchor="middle" font-size="10" font-weight="600" fill="#92400e">Playbook</text>
+  <text x="350" y="87" text-anchor="middle" font-size="8" fill="#b45309">.playbook.yaml</text>
+  <text x="350" y="99" text-anchor="middle" font-size="8" fill="#b45309">3-doc format</text>
+
+  <line x1="400" y1="77" x2="425" y2="77" stroke="#475569" stroke-width="1.5" marker-end="url(#a1)"/>
+
+  <!-- Step 4: Compiler -->
+  <rect x="430" y="50" width="110" height="55" rx="6" fill="#e0e7ff" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="485" y="72" text-anchor="middle" font-size="10" font-weight="600" fill="#3730a3">Playbook</text>
+  <text x="485" y="87" text-anchor="middle" font-size="10" font-weight="600" fill="#3730a3">Compiler</text>
+  <text x="485" y="99" text-anchor="middle" font-size="8" fill="#4f46e5">→ CompilationResult</text>
+
+  <line x1="540" y1="77" x2="565" y2="77" stroke="#475569" stroke-width="1.5" marker-end="url(#a1)"/>
+
+  <!-- Step 5: PlaybookWorkerFunction -->
+  <rect x="570" y="50" width="130" height="55" rx="6" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+  <text x="635" y="68" text-anchor="middle" font-size="9" font-weight="600" fill="#065f46">Playbook</text>
+  <text x="635" y="82" text-anchor="middle" font-size="9" font-weight="600" fill="#065f46">WorkerFunction</text>
+  <text x="635" y="97" text-anchor="middle" font-size="8" fill="#047857">workflow + source maps</text>
+
+  <!-- Two sources feeding catalog -->
+  <rect x="70" y="140" width="140" height="48" rx="6" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1"/>
+  <text x="140" y="160" text-anchor="middle" font-size="9" font-weight="600" fill="#065f46">Classpath Playbooks</text>
+  <text x="140" y="175" text-anchor="middle" font-size="8" fill="#047857">8 curated · code-reviewed</text>
+
+  <rect x="240" y="140" width="140" height="48" rx="6" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="310" y="160" text-anchor="middle" font-size="9" font-weight="600" fill="#991b1b">Runtime Templates</text>
+  <text x="310" y="175" text-anchor="middle" font-size="8" fill="#b91c1c">LLM-generated · validated</text>
+
+  <!-- Lines from sources to catalog -->
+  <line x1="165" y1="140" x2="200" y2="105" stroke="#6ee7b7" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="285" y1="140" x2="230" y2="105" stroke="#fca5a5" stroke-width="1" stroke-dasharray="4,3"/>
+
+  <!-- Validator box -->
+  <rect x="430" y="140" width="130" height="48" rx="6" fill="#fef2f2" stroke="#ef4444" stroke-width="1"/>
+  <text x="495" y="160" text-anchor="middle" font-size="9" font-weight="600" fill="#991b1b">Validator</text>
+  <text x="495" y="175" text-anchor="middle" font-size="8" fill="#b91c1c">URL allowlist · steps check</text>
+
+  <line x1="375" y1="164" x2="430" y2="164" stroke="#ef4444" stroke-width="1" marker-end="url(#a1)"/>
+  <text x="403" y="158" text-anchor="middle" font-size="7" fill="#ef4444">generated</text>
+  <text x="403" y="168" text-anchor="middle" font-size="7" fill="#ef4444">only</text>
+
+  <!-- Note -->
+  <text x="360" y="220" text-anchor="middle" font-size="9" fill="#64748b" font-style="italic">resolveToPlaybookWorker("contractor-onboarding") — one call, template name to engine-ready function</text>
+
+  <!-- Legend -->
+  <rect x="20" y="238" width="10" height="10" rx="2" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1"/>
+  <text x="35" y="248" font-size="8" fill="#475569">curated (code)</text>
+  <rect x="120" y="238" width="10" height="10" rx="2" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="135" y="248" font-size="8" fill="#475569">generated (runtime)</text>
+  <rect x="230" y="238" width="10" height="10" rx="2" fill="#e0e7ff" stroke="#6366f1" stroke-width="1"/>
+  <text x="245" y="248" font-size="8" fill="#475569">compilation</text>
+  <rect x="310" y="238" width="10" height="10" rx="2" fill="#d1fae5" stroke="#10b981" stroke-width="1"/>
+  <text x="325" y="248" font-size="8" fill="#475569">engine-ready</text>
+</svg>

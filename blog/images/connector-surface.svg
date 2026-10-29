@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 300" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="cg1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#dbeafe"/><stop offset="100%" stop-color="#bfdbfe"/>
+    </linearGradient>
+    <linearGradient id="cg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d1fae5"/><stop offset="100%" stop-color="#a7f3d0"/>
+    </linearGradient>
+    <linearGradient id="cg3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fef3c7"/><stop offset="100%" stop-color="#fde68a"/>
+    </linearGradient>
+    <linearGradient id="cg4" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fce7f3"/><stop offset="100%" stop-color="#fbcfe8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="720" height="300" rx="8" fill="#f8fafc"/>
+
+  <text x="360" y="26" text-anchor="middle" font-size="14" font-weight="700" fill="#1e293b">Connector Surface — 100+ operations, 12 domains, two access paths</text>
+
+  <!-- Row 1: People & Comms -->
+  <text x="25" y="55" font-size="9" font-weight="600" fill="#64748b">PEOPLE &amp; COMMS</text>
+
+  <rect x="25" y="62" width="105" height="52" rx="6" fill="url(#cg1)" stroke="#93c5fd" stroke-width="1"/>
+  <text x="77" y="80" text-anchor="middle" font-size="10" font-weight="600" fill="#1e40af">Contacts</text>
+  <text x="77" y="93" text-anchor="middle" font-size="8" fill="#3b82f6">9 ops</text>
+  <text x="77" y="106" text-anchor="middle" font-size="7" fill="#64748b">search · get · create</text>
+
+  <rect x="140" y="62" width="105" height="52" rx="6" fill="url(#cg1)" stroke="#93c5fd" stroke-width="1"/>
+  <text x="192" y="80" text-anchor="middle" font-size="10" font-weight="600" fill="#1e40af">Chat</text>
+  <text x="192" y="93" text-anchor="middle" font-size="8" fill="#3b82f6">12 ops</text>
+  <text x="192" y="106" text-anchor="middle" font-size="7" fill="#64748b">send · history · reply</text>
+
+  <rect x="255" y="62" width="105" height="52" rx="6" fill="url(#cg1)" stroke="#93c5fd" stroke-width="1"/>
+  <text x="307" y="80" text-anchor="middle" font-size="10" font-weight="600" fill="#1e40af">Messaging</text>
+  <text x="307" y="93" text-anchor="middle" font-size="8" fill="#3b82f6">5 ops</text>
+  <text x="307" y="106" text-anchor="middle" font-size="7" fill="#64748b">sms · whatsapp · email</text>
+
+  <rect x="370" y="62" width="105" height="52" rx="6" fill="url(#cg1)" stroke="#93c5fd" stroke-width="1"/>
+  <text x="422" y="80" text-anchor="middle" font-size="10" font-weight="600" fill="#1e40af">Email</text>
+  <text x="422" y="93" text-anchor="middle" font-size="8" fill="#3b82f6">4 ops</text>
+  <text x="422" y="106" text-anchor="middle" font-size="7" fill="#64748b">list · get · send</text>
+
+  <!-- Row 2: Data & Docs -->
+  <text x="25" y="135" font-size="9" font-weight="600" fill="#64748b">DATA &amp; DOCS</text>
+
+  <rect x="25" y="142" width="105" height="52" rx="6" fill="url(#cg2)" stroke="#6ee7b7" stroke-width="1"/>
+  <text x="77" y="160" text-anchor="middle" font-size="10" font-weight="600" fill="#065f46">Calendar</text>
+  <text x="77" y="173" text-anchor="middle" font-size="8" fill="#10b981">7 ops</text>
+  <text x="77" y="186" text-anchor="middle" font-size="7" fill="#64748b">list · create · sync</text>
+
+  <rect x="140" y="142" width="105" height="52" rx="6" fill="url(#cg2)" stroke="#6ee7b7" stroke-width="1"/>
+  <text x="192" y="160" text-anchor="middle" font-size="10" font-weight="600" fill="#065f46">Documents</text>
+  <text x="192" y="173" text-anchor="middle" font-size="8" fill="#10b981">10 ops</text>
+  <text x="192" y="186" text-anchor="middle" font-size="7" fill="#64748b">upload · search · share</text>
+
+  <rect x="255" y="142" width="105" height="52" rx="6" fill="url(#cg2)" stroke="#6ee7b7" stroke-width="1"/>
+  <text x="307" y="160" text-anchor="middle" font-size="10" font-weight="600" fill="#065f46">Project</text>
+  <text x="307" y="173" text-anchor="middle" font-size="8" fill="#10b981">18 ops</text>
+  <text x="307" y="186" text-anchor="middle" font-size="7" fill="#64748b">issues · milestones</text>
+
+  <!-- Row 3: Domain -->
+  <text x="25" y="215" font-size="9" font-weight="600" fill="#64748b">DOMAIN</text>
+
+  <rect x="25" y="222" width="105" height="52" rx="6" fill="url(#cg3)" stroke="#fbbf24" stroke-width="1"/>
+  <text x="77" y="240" text-anchor="middle" font-size="10" font-weight="600" fill="#92400e">Bank</text>
+  <text x="77" y="253" text-anchor="middle" font-size="8" fill="#d97706">6 ops</text>
+  <text x="77" y="266" text-anchor="middle" font-size="7" fill="#64748b">accounts · payments</text>
+
+  <rect x="140" y="222" width="105" height="52" rx="6" fill="url(#cg3)" stroke="#fbbf24" stroke-width="1"/>
+  <text x="192" y="240" text-anchor="middle" font-size="10" font-weight="600" fill="#92400e">Health</text>
+  <text x="192" y="253" text-anchor="middle" font-size="8" fill="#d97706">9 ops</text>
+  <text x="192" y="266" text-anchor="middle" font-size="7" fill="#64748b">providers · booking</text>
+
+  <rect x="255" y="222" width="105" height="52" rx="6" fill="url(#cg3)" stroke="#fbbf24" stroke-width="1"/>
+  <text x="307" y="240" text-anchor="middle" font-size="10" font-weight="600" fill="#92400e">Commerce</text>
+  <text x="307" y="253" text-anchor="middle" font-size="8" fill="#d97706">11 ops</text>
+  <text x="307" y="266" text-anchor="middle" font-size="7" fill="#64748b">search · cart · orders</text>
+
+  <rect x="370" y="222" width="105" height="52" rx="6" fill="url(#cg3)" stroke="#fbbf24" stroke-width="1"/>
+  <text x="422" y="240" text-anchor="middle" font-size="10" font-weight="600" fill="#92400e">Travel</text>
+  <text x="422" y="253" text-anchor="middle" font-size="8" fill="#d97706">12 ops</text>
+  <text x="422" y="266" text-anchor="middle" font-size="7" fill="#64748b">transport · hotels</text>
+
+  <rect x="485" y="222" width="105" height="52" rx="6" fill="url(#cg3)" stroke="#fbbf24" stroke-width="1"/>
+  <text x="537" y="240" text-anchor="middle" font-size="10" font-weight="600" fill="#92400e">Location</text>
+  <text x="537" y="253" text-anchor="middle" font-size="8" fill="#d97706">7 ops</text>
+  <text x="537" y="266" text-anchor="middle" font-size="7" fill="#64748b">places · geocode · dir</text>
+
+  <!-- Two paths annotation -->
+  <rect x="510" y="62" width="185" height="130" rx="8" fill="white" stroke="#94a3b8" stroke-width="1"/>
+  <text x="602" y="82" text-anchor="middle" font-size="10" font-weight="700" fill="#1e293b">Two access paths</text>
+  <text x="602" y="100" text-anchor="middle" font-size="9" fill="#475569">same SPI, same operations</text>
+
+  <rect x="522" y="112" width="78" height="28" rx="5" fill="#818cf8" opacity="0.85"/>
+  <text x="561" y="130" text-anchor="middle" font-size="9" font-weight="600" fill="white">MCP tool</text>
+  <text x="522" y="155" font-size="8" fill="#6b7280">LLM calls mid-task</text>
+  <text x="522" y="167" font-size="8" fill="#6b7280">one at a time</text>
+
+  <rect x="608" y="112" width="78" height="28" rx="5" fill="#34d399" opacity="0.85"/>
+  <text x="647" y="130" text-anchor="middle" font-size="9" font-weight="600" fill="white">REST API</text>
+  <text x="608" y="155" font-size="8" fill="#6b7280">Playbook batches</text>
+  <text x="608" y="167" font-size="8" fill="#6b7280">no LLM needed</text>
+
+  <!-- Total -->
+  <text x="360" y="294" text-anchor="middle" font-size="10" fill="#475569" font-weight="600">100+ operations · every one available both ways</text>
+</svg>

@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#475569"/>
+    </marker>
+    <marker id="arrRed" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#ef4444"/>
+    </marker>
+    <marker id="arrGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#10b981"/>
+    </marker>
+  </defs>
+
+  <rect width="720" height="380" rx="8" fill="#f8fafc"/>
+
+  <!-- BEFORE -->
+  <text x="175" y="24" text-anchor="middle" font-size="13" font-weight="700" fill="#991b1b">Before: every lookup is an LLM round-trip</text>
+
+  <!-- Worker box -->
+  <rect x="100" y="40" width="150" height="50" rx="8" fill="#818cf8" opacity="0.9"/>
+  <text x="175" y="62" text-anchor="middle" font-size="11" font-weight="600" fill="white">get-quotes worker</text>
+  <text x="175" y="78" text-anchor="middle" font-size="9" fill="white" opacity="0.8">AgentExec — LLM</text>
+
+  <!-- LLM token cost indicators -->
+  <line x1="175" y1="90" x2="175" y2="110" stroke="#ef4444" stroke-width="1.5" marker-end="url(#arrRed)"/>
+  <text x="185" y="106" font-size="8" fill="#ef4444">tokens</text>
+
+  <!-- MCP calls from worker -->
+  <rect x="30" y="115" width="290" height="135" rx="6" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="45" y="135" font-size="9" font-weight="600" fill="#991b1b">5 sequential LLM tool calls:</text>
+
+  <rect x="45" y="145" width="260" height="20" rx="4" fill="white" stroke="#fca5a5" stroke-width="0.5"/>
+  <text x="55" y="159" font-size="8" fill="#6b7280">1. reason → </text>
+  <text x="110" y="159" font-size="8" fill="#dc2626" font-weight="500">search_contacts("Acme Plumbing")</text>
+  <text x="280" y="159" font-size="8" fill="#ef4444">→ wait</text>
+
+  <rect x="45" y="168" width="260" height="20" rx="4" fill="white" stroke="#fca5a5" stroke-width="0.5"/>
+  <text x="55" y="182" font-size="8" fill="#6b7280">2. reason → </text>
+  <text x="110" y="182" font-size="8" fill="#dc2626" font-weight="500">search_places("42 Oak Lane")</text>
+  <text x="280" y="182" font-size="8" fill="#ef4444">→ wait</text>
+
+  <rect x="45" y="191" width="260" height="20" rx="4" fill="white" stroke="#fca5a5" stroke-width="0.5"/>
+  <text x="55" y="205" font-size="8" fill="#6b7280">3. reason → </text>
+  <text x="110" y="205" font-size="8" fill="#dc2626" font-weight="500">list_events(next 2 weeks)</text>
+  <text x="280" y="205" font-size="8" fill="#ef4444">→ wait</text>
+
+  <rect x="45" y="214" width="260" height="20" rx="4" fill="white" stroke="#fca5a5" stroke-width="0.5"/>
+  <text x="55" y="228" font-size="8" fill="#6b7280">4. reason → </text>
+  <text x="110" y="228" font-size="8" fill="#dc2626" font-weight="500">list_transactions(limit=10)</text>
+  <text x="280" y="228" font-size="8" fill="#ef4444">→ wait</text>
+
+  <rect x="45" y="237" width="260" height="20" rx="4" fill="white" stroke="#fca5a5" stroke-width="0.5"/>
+  <text x="55" y="251" font-size="8" fill="#6b7280">5. finally: </text>
+  <text x="110" y="251" font-size="8" fill="#1e293b" font-weight="500">judge if quote is reasonable</text>
+  <text x="280" y="251" font-size="8" fill="#059669">← the actual work</text>
+
+  <text x="175" y="280" text-anchor="middle" font-size="9" fill="#991b1b" font-style="italic">80% of tokens spent on lookups, 20% on judgment</text>
+
+  <!-- Vertical divider -->
+  <line x1="355" y1="15" x2="355" y2="370" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,4"/>
+
+  <!-- AFTER -->
+  <text x="537" y="24" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">After: lookups are mechanical, LLM judges</text>
+
+  <!-- Playbook box -->
+  <rect x="390" y="40" width="150" height="50" rx="8" fill="#34d399" opacity="0.9"/>
+  <text x="465" y="62" text-anchor="middle" font-size="11" font-weight="600" fill="white">pre-stage playbook</text>
+  <text x="465" y="78" text-anchor="middle" font-size="9" fill="white" opacity="0.8">mechanical — no LLM</text>
+
+  <!-- Mechanical calls -->
+  <rect x="390" y="100" width="290" height="90" rx="6" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1"/>
+  <text x="405" y="118" font-size="9" font-weight="600" fill="#065f46">Playbook batches (parallel, no tokens):</text>
+
+  <rect x="405" y="128" width="130" height="18" rx="3" fill="white" stroke="#6ee7b7" stroke-width="0.5"/>
+  <text x="412" y="141" font-size="8" fill="#059669">searchContacts</text>
+
+  <rect x="545" y="128" width="120" height="18" rx="3" fill="white" stroke="#6ee7b7" stroke-width="0.5"/>
+  <text x="552" y="141" font-size="8" fill="#059669">searchPlaces</text>
+
+  <rect x="405" y="150" width="130" height="18" rx="3" fill="white" stroke="#6ee7b7" stroke-width="0.5"/>
+  <text x="412" y="163" font-size="8" fill="#059669">listEvents</text>
+
+  <rect x="545" y="150" width="120" height="18" rx="3" fill="white" stroke="#6ee7b7" stroke-width="0.5"/>
+  <text x="552" y="163" font-size="8" fill="#059669">listTransactions</text>
+
+  <text x="535" y="183" text-anchor="middle" font-size="8" fill="#047857" font-style="italic">all 4 calls batched — zero tokens</text>
+
+  <!-- Arrow down to worker -->
+  <line x1="535" y1="192" x2="535" y2="210" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrGreen)"/>
+  <text x="555" y="206" font-size="8" fill="#10b981">assembled context</text>
+
+  <!-- Worker box (after) -->
+  <rect x="462" y="215" width="150" height="50" rx="8" fill="#818cf8" opacity="0.9"/>
+  <text x="537" y="237" text-anchor="middle" font-size="11" font-weight="600" fill="white">get-quotes worker</text>
+  <text x="537" y="253" text-anchor="middle" font-size="9" fill="white" opacity="0.8">AgentExec — LLM</text>
+
+  <rect x="390" y="275" width="290" height="40" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1"/>
+  <text x="535" y="293" text-anchor="middle" font-size="9" font-weight="600" fill="#5b21b6">One judgment call:</text>
+  <text x="535" y="307" text-anchor="middle" font-size="9" fill="#6d28d9">"Is this quote reasonable given the history?"</text>
+
+  <text x="537" y="340" text-anchor="middle" font-size="9" fill="#065f46" font-style="italic">100% of tokens spent on the decision that matters</text>
+
+  <!-- Cost comparison -->
+  <rect x="55" y="300" width="245" height="55" rx="6" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="177" y="320" text-anchor="middle" font-size="10" font-weight="600" fill="#991b1b">~5 LLM round-trips per worker</text>
+  <text x="177" y="340" text-anchor="middle" font-size="9" fill="#b91c1c">× 5 workers per case = 25 tool calls</text>
+
+  <rect x="410" y="350" width="245" height="25" rx="6" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1"/>
+  <text x="532" y="367" text-anchor="middle" font-size="10" font-weight="600" fill="#065f46">1 playbook + 5 focused judgment calls</text>
+</svg>
