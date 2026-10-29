@@ -9,11 +9,11 @@
 **Focal issue:** #140 — feat: LLM-orchestrated mechanical coordination
 **Issue group:** #140
 
-**Goal:** Shift mechanical connector work from LLM tool calls to deterministic playbook execution. Planning worker selects/generates playbooks, PlaybookCompiler compiles them, FlowWorkerFunction executes them.
+**Goal:** Shift mechanical connector work from LLM tool calls to deterministic playbook execution. Planning worker selects/generates playbooks, `PlaybookWorkerFunction` wraps compiled playbooks, `FlowWorkerFunctionHandler` executes them.
 
-**Architecture:** Planning worker (AgentExec) runs pre-engine, selects playbook templates from a catalog, writes a CoordinationPlan to context. `LifeCaseService.startCase()` builds a fresh CaseDefinition with FlowWorkerFunction workers wired from compiled playbooks. Connector operations use `rest-request:` steps in playbook YAML — HTTP calls to connector REST endpoints, no custom dispatcher.
+**Architecture:** Planning worker (AgentExec) runs pre-engine, selects playbook templates from a catalog, writes a CoordinationPlan to context. `LifeCaseService.startCase()` builds a fresh CaseDefinition with `PlaybookWorkerFunction` workers wired from compiled playbooks. Connector operations use `rest-request:` steps in playbook YAML — HTTP calls to connector REST endpoints, no custom dispatcher.
 
-**Tech Stack:** Java 21, Quarkus 3.32.2, CaseHub Playbook Language, PlaybookCompiler (casehub-platform-playbook-compiler), FlowWorkerFunction (casehub-engine-support-core)
+**Tech Stack:** Java 21, Quarkus 3.32.2, CaseHub Playbook Language, PlaybookCompiler (casehub-platform-playbook-compiler), PlaybookWorkerFunction + FlowWorkerFunctionHandler (casehub-engine-support-core, engine#1263 — landed)
 
 ## Global Constraints
 
@@ -58,8 +58,8 @@
 - Produces: `CoordinationTemplateCatalog.findByName(String)` → `Optional<CoordinationTemplate>`
 - Produces: `CoordinationTemplateCatalog.findByDomain(String)` → `List<CoordinationTemplate>`
 - Produces: `CoordinationTemplateCatalog.all()` → `List<CoordinationTemplate>`
-- Produces: `CoordinationTemplateCatalog.resolveToWorkflow(String)` → `Workflow`
-- Produces: `CoordinationTemplateCatalog.compilePlaybook(String)` → `Workflow` (static)
+- Produces: `CoordinationTemplateCatalog.resolveToPlaybookWorker(String)` → `PlaybookWorkerFunction`
+- Produces: `CoordinationTemplateCatalog.compilePlaybook(String)` → `CompilationResult` (static)
 - Produces: `CoordinationTemplateValidator.validate(String)` → `ValidationResult`
 
 - [ ] **Step 1: Create api/ records**
@@ -247,23 +247,24 @@ class CoordinationTemplateCatalogTest {
     }
 
     @Test
-    void resolves_template_to_workflow() {
-        var workflow = catalog.resolveToWorkflow("contractor-onboarding");
-        assertThat(workflow).isNotNull();
-        assertThat(workflow.getDo()).isNotEmpty();
+    void resolves_template_to_playbook_worker_function() {
+        var pwf = catalog.resolveToPlaybookWorker("contractor-onboarding");
+        assertThat(pwf).isNotNull();
+        assertThat(pwf.workflow().getDo()).isNotEmpty();
+        assertThat(pwf.compilationResult()).isNotNull();
     }
 
     @Test
-    void compile_playbook_produces_valid_workflow() {
+    void compile_playbook_produces_valid_compilation_result() {
         String yaml = """
             steps:
               - rest-request:
                   method: GET
                   url: /api/connectors/contacts/searchContacts?query=test
             """;
-        var workflow = CoordinationTemplateCatalog.compilePlaybook(yaml);
-        assertThat(workflow).isNotNull();
-        assertThat(workflow.getDo()).hasSize(1);
+        var result = CoordinationTemplateCatalog.compilePlaybook(yaml);
+        assertThat(result).isNotNull();
+        assertThat(result.workflow().getDo()).hasSize(1);
     }
 
     @Test
@@ -276,17 +277,25 @@ class CoordinationTemplateCatalogTest {
 
 - [ ] **Step 7: Implement CoordinationTemplateCatalog**
 
-Key method — `compilePlaybook()` uses `PlaybookCompiler`:
+Key methods — `compilePlaybook()` returns the full `CompilationResult` (preserving source maps and coordination specs for error reporting), and `resolveToPlaybookWorker()` wraps it in `PlaybookWorkerFunction`:
 
 ```java
-public static Workflow compilePlaybook(String playbookYaml) {
+public static CompilationResult compilePlaybook(String playbookYaml) {
     var doc = PlaybookDocument.parse(playbookYaml);
     var outcome = new PlaybookCompiler().compile(doc);
     if (outcome instanceof CompilationOutcome.Failure f) {
         throw new IllegalArgumentException(
             "Playbook compilation failed: " + f.diagnostics());
     }
-    return ((CompilationOutcome.Success) outcome).result().workflow();
+    return ((CompilationOutcome.Success) outcome).result();
+}
+
+public PlaybookWorkerFunction resolveToPlaybookWorker(String templateName) {
+    CoordinationTemplate t = findByName(templateName)
+        .orElseThrow(() -> new IllegalArgumentException(
+            "Unknown template: " + templateName));
+    CompilationResult result = compilePlaybook(t.getTemplateYaml());
+    return new PlaybookWorkerFunction(result.workflow(), result);
 }
 ```
 
@@ -393,12 +402,13 @@ Planning worker, buildFreshDefinition(), and LifeCaseService extended to 5-phase
 - Consumes: `CoordinationPlan`, `CoordinationTemplateCatalog`, `CoordinationTemplateValidator` — from Task 1
 - Consumes: `LifeAgentProviderFactory.invokerFor()` — existing
 - Consumes: `CaseHubRuntime.startCase(CaseDefinition, Map)` — existing
+- Consumes: `PlaybookWorkerFunction(Workflow, CompilationResult)` — from engine#1263
 - Produces: `LifeTypedCaseHub.buildFreshDefinition(CoordinationPlan)` → `CaseDefinition`
 - Produces: Extended 5-phase `LifeCaseService.startCase()`
 
 - [ ] **Step 1: Write failing test for buildFreshDefinition**
 
-Test that given a CoordinationPlan with pre/post template names, the fresh definition includes FlowWorkerFunction workers at the right positions.
+Test that given a CoordinationPlan with pre/post template names, the fresh definition includes PlaybookWorkerFunction workers at the right positions.
 
 - [ ] **Step 2: Implement buildFreshDefinition on LifeTypedCaseHub**
 
@@ -419,21 +429,21 @@ public CaseDefinition buildFreshDefinition(CoordinationPlan plan) {
 
     // Add pre-processing playbook worker
     if (plan.preTemplate() != null) {
-        Workflow preWf = coordinationCatalog.resolveToWorkflow(plan.preTemplate());
+        PlaybookWorkerFunction preWf = coordinationCatalog.resolveToPlaybookWorker(plan.preTemplate());
         fresh.getWorkers().add(0, Worker.builder()
             .name("pre-stage-data")
             .capabilityName("mechanical-pre-staging")
-            .function(new FlowWorkerFunction(preWf))
+            .function(preWf)
             .build());
     }
 
     // Add post-processing playbook worker
     if (plan.postTemplate() != null) {
-        Workflow postWf = coordinationCatalog.resolveToWorkflow(plan.postTemplate());
+        PlaybookWorkerFunction postWf = coordinationCatalog.resolveToPlaybookWorker(plan.postTemplate());
         fresh.getWorkers().add(Worker.builder()
             .name("post-process-results")
             .capabilityName("mechanical-post-processing")
-            .function(new FlowWorkerFunction(postWf))
+            .function(postWf)
             .build());
     }
 
@@ -441,10 +451,10 @@ public CaseDefinition buildFreshDefinition(CoordinationPlan plan) {
     for (var gen : plan.generatedTemplates()) {
         var validation = coordinationValidator.validate(gen.templateYaml());
         if (validation.valid()) {
-            Workflow genWf = CoordinationTemplateCatalog.compilePlaybook(gen.templateYaml());
+            CompilationResult result = CoordinationTemplateCatalog.compilePlaybook(gen.templateYaml());
             fresh.getWorkers().add(Worker.builder()
                 .name(gen.name()).capabilityName(gen.name())
-                .function(new FlowWorkerFunction(genWf))
+                .function(new PlaybookWorkerFunction(result.workflow(), result))
                 .build());
         }
     }
@@ -501,7 +511,7 @@ git add app/src/test/java/io/casehub/life/app/coordination/
 git commit -m "feat(#140): wire playbook coordination into case start
 
 LifeTypedCaseHub.buildFreshDefinition() creates per-case CaseDefinition
-with FlowWorkerFunction workers compiled from playbook templates.
+with PlaybookWorkerFunction workers compiled from playbook templates.
 LifeCaseService.startCase() extended to 5-phase: scaffold → CBR →
 planning worker → definition build → engine start.
 
@@ -514,11 +524,13 @@ Refs #140"
 
 - [2026-10-27-playbook-coordination-design.md] — design spec
 - [PlaybookCompiler.java] — casehub-platform-playbook-compiler
-- [FlowWorkerFunction.java] — casehub-engine-support-core
-- [FlowWorkerFunctionHandler.java] — SWF execution
+- [PlaybookWorkerFunction.java] — casehub-engine-support-core (engine#1263, landed)
+- [PlaybookWorkerFunctionProvider.java] — detects `steps:`, compiles via PlaybookCompiler
+- [FlowWorkerFunctionHandler.java] — SWF execution (handles both FlowWorkerFunction and PlaybookWorkerFunction via SWFWorkerFunction sealed interface)
 - [LifeCaseService.java] — 4-phase case start (extends to 5)
 - [LifeTypedCaseHub.java] — abstract base for case hubs
 - [WorkerAgentInvoker.java] — synchronous agent execution
 - [PP-20261026-8a9dce] — no-openclaw-dependencies protocol
 - [PP-20260529-3ffe28] — three-phase case start protocol
 - [casehubio/life#140] — focal issue
+- [casehubio/engine#1263] — PlaybookWorkerFunction (landed, closed)
