@@ -117,7 +117,7 @@ compilation is additive, never lossy.
 
 And the architectural payoff: no engine changes at all. Playbooks use
 `rest-request:` steps for connector calls — direct HTTP to the REST
-endpoints. `PlaybookCompiler` compiles them, `FlowWorkerFunction` wraps
+endpoints. `PlaybookCompiler` compiles them, `PlaybookWorkerFunction` wraps
 the result, `FlowWorkerFunctionHandler` executes it. Zero new platform
 SPIs, zero cross-repo modifications.
 
@@ -172,23 +172,72 @@ old way still works. Mechanical coordination is an optimisation, not
 a gate. If playbooks can't handle it, the LLM does it directly. No
 silent failure, no infinite retry loops (#141).
 
-## What's being built
+## What's landed
 
-The implementation plan has two batches:
+The foundation batch is committed. 21 files, 15 tests.
 
-**Foundation:** `CoordinationPlan` record, `CoordinationTemplate` JPA
-entity with runtime store, `CoordinationTemplateCatalog` that merges
-curated classpath playbooks with LLM-generated ones,
-`CoordinationTemplateValidator` for security (URL allowlisting on
-generated playbooks), and 8 curated `.playbook.yaml` templates covering
-contractor onboarding, appointment prep, financial review, travel
-research, and three post-processing patterns.
+`CoordinationPlan` is the planning worker's output — which pre-processing
+playbook, which post-processing playbook, which domain workers to skip,
+which to parameterise. It's a record in the `api/` module, zero framework
+dependencies, round-trips cleanly through JSON.
 
-**Case integration:** `buildFreshDefinition()` on `LifeTypedCaseHub`
-that constructs per-case `CaseDefinition` instances with
-`FlowWorkerFunction` workers compiled from the selected playbooks. An
-extended 5-phase `LifeCaseService.startCase()` — the existing scaffold →
-CBR retrieval flow gains a planning worker invocation and definition
-build before engine start.
+`CoordinationTemplateCatalog` is the playbook library. It loads 8 curated
+`.playbook.yaml` files from the classpath at startup and merges them with
+LLM-generated templates stored in a database table (`V114` migration).
+The key method is `resolveToPlaybookWorker()` — it takes a template name,
+compiles the playbook YAML via `PlaybookCompiler`, and returns a
+`PlaybookWorkerFunction` ready to wire into a case definition.
 
-No cross-repo changes. The platform already has everything this needs.
+The catalog parses the 3-document YAML format (front matter, metadata,
+steps) using SnakeYAML directly, extracting `meta.domain` and
+`meta.description` for catalog queries. I avoided pulling in
+`yaml-step-runtime` as a dependency — the multi-document YAML parsing
+is 20 lines of SnakeYAML, not worth a transitive dependency for.
+
+`CoordinationTemplateValidator` enforces security on LLM-generated
+templates. Every `rest-request:` URL must start with `/api/connectors/`
+— no external HTTP calls, no non-connector local paths. The playbook
+must have a `steps:` block and must compile successfully. A generated
+playbook that fails validation falls back to MCP tool calls — the
+domain workers still have their tool access.
+
+The 8 curated playbook templates cover:
+- **Pre-processing:** contractor onboarding, appointment prep, site
+  assessment, financial review prep, travel research
+- **Post-processing:** completion report, appointment follow-up,
+  payment and close
+
+## What surfaced during implementation
+
+**`PlaybookWorkerFunction` landed in the engine** (engine#1263). This is
+the playbook counterpart to `FlowWorkerFunction` — wraps a compiled
+`Workflow` plus the full `CompilationResult` (source maps, coordination
+specs). `FlowWorkerFunctionHandler` executes both via a shared
+`SWFWorkerFunction` sealed interface. The catalog returns
+`PlaybookWorkerFunction` directly — one call from template name to
+engine-ready worker function.
+
+**Expression variables in URLs break `RestRequestCompiler`.**
+`URI.create()` chokes on `${input.contractorName}` in query strings.
+The expressions are runtime SWF constructs, not compile-time literals,
+but the compiler validates the URI at compile time. Filed platform#675.
+For now, the templates use POST with body parameters instead of GET with
+query strings. Once the compiler handles URI templates, the playbooks
+can use the more natural GET-with-params style.
+
+**SWF version convergence.** The engine SNAPSHOT (rebuilt with
+`playbook-compiler` dependency) pulls in SWF SDK 7.35.3.Final, while
+`quarkus-flow` brings 7.25.1.Final. Maven's enforcer catches the
+mismatch. Fixed with `dependencyManagement` overrides in life's parent
+pom — force convergence to the newer version. Not a runtime issue
+(newer is compatible), just an enforcer policy.
+
+## What's next
+
+One batch remains: `buildFreshDefinition()` on `LifeTypedCaseHub` and
+the extended 5-phase `LifeCaseService.startCase()`. This wires the
+foundation into the case lifecycle — planning worker selects templates,
+`buildFreshDefinition()` compiles them into `PlaybookWorkerFunction`
+workers, and the engine executes them alongside the existing domain
+workers. The domain workers receive pre-assembled context and focus on
+judgment. The playbooks handle the mechanical lookups.
