@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" font-family="system-ui, -apple-system, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#555"/>
+    </marker>
+    <marker id="arrowhead-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#2563eb"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="720" height="400" fill="#fafafa" rx="8"/>
+
+  <!-- Title -->
+  <text x="360" y="28" text-anchor="middle" font-size="15" font-weight="600" fill="#1a1a1a">Calendar Sync — Data Flow</text>
+
+  <!-- casehub-life box -->
+  <rect x="20" y="50" width="460" height="330" rx="6" fill="none" stroke="#d4d4d4" stroke-dasharray="6,3"/>
+  <text x="30" y="68" font-size="11" fill="#737373" font-weight="500">casehub-life</text>
+
+  <!-- WorkItem Lifecycle -->
+  <rect x="40" y="85" width="160" height="50" rx="4" fill="#f0f9ff" stroke="#93c5fd"/>
+  <text x="120" y="107" text-anchor="middle" font-weight="600" fill="#1e40af" font-size="12">WorkItem</text>
+  <text x="120" y="122" text-anchor="middle" fill="#3b82f6" font-size="11">lifecycle events</text>
+
+  <!-- Observer -->
+  <rect x="40" y="170" width="160" height="44" rx="4" fill="#fefce8" stroke="#fcd34d"/>
+  <text x="120" y="190" text-anchor="middle" font-weight="600" fill="#854d0e" font-size="12">Outbound Observer</text>
+  <text x="120" y="203" text-anchor="middle" fill="#a16207" font-size="10">@Observes CDI events</text>
+
+  <!-- Arrow: WorkItem -> Observer -->
+  <line x1="120" y1="135" x2="120" y2="168" stroke="#555" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="135" y="155" fill="#737373" font-size="10">created / updated / completed</text>
+
+  <!-- SyncService -->
+  <rect x="40" y="250" width="160" height="50" rx="4" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="120" y="272" text-anchor="middle" font-weight="600" fill="#166534" font-size="12">Calendar Sync Service</text>
+  <text x="120" y="287" text-anchor="middle" fill="#16a34a" font-size="10">create / update / delete</text>
+
+  <!-- Arrow: Observer -> SyncService -->
+  <line x1="120" y1="214" x2="120" y2="248" stroke="#555" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <!-- Mapping Store -->
+  <rect x="260" y="250" width="160" height="50" rx="4" fill="#faf5ff" stroke="#c4b5fd"/>
+  <text x="340" y="272" text-anchor="middle" font-weight="600" fill="#5b21b6" font-size="12">Mapping Store</text>
+  <text x="340" y="287" text-anchor="middle" fill="#7c3aed" font-size="10">entity ↔ calendar event</text>
+
+  <!-- Arrow: SyncService <-> MappingStore -->
+  <line x1="200" y1="275" x2="258" y2="275" stroke="#555" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <!-- REST Resource -->
+  <rect x="260" y="160" width="160" height="50" rx="4" fill="#fff7ed" stroke="#fdba74"/>
+  <text x="340" y="182" text-anchor="middle" font-weight="600" fill="#9a3412" font-size="12">Calendar Resource</text>
+  <text x="340" y="197" text-anchor="middle" fill="#ea580c" font-size="10">GET /life-calendar/events</text>
+
+  <!-- Arrow: REST -> SyncService -->
+  <line x1="260" y1="196" x2="200" y2="255" stroke="#555" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="215" y="218" fill="#737373" font-size="10">listEvents()</text>
+
+  <!-- Google Calendar / CalendarPlatform SPI -->
+  <rect x="520" y="180" width="180" height="90" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="610" y="205" text-anchor="middle" font-weight="700" fill="#1e40af" font-size="13">CalendarPlatform</text>
+  <text x="610" y="222" text-anchor="middle" fill="#3b82f6" font-size="11">SPI</text>
+  <text x="610" y="240" text-anchor="middle" fill="#60a5fa" font-size="10">Google · Ref · Demo</text>
+  <text x="610" y="255" text-anchor="middle" fill="#60a5fa" font-size="10">CRUD + incremental sync</text>
+
+  <!-- Arrow: SyncService -> CalendarPlatform (outbound) -->
+  <line x1="200" y1="265" x2="518" y2="220" stroke="#2563eb" stroke-width="2" marker-end="url(#arrowhead-blue)"/>
+  <text x="360" y="233" fill="#2563eb" font-size="10" font-weight="600">outbound push</text>
+
+  <!-- Arrow: CalendarPlatform -> REST (inbound) -->
+  <line x1="518" y1="240" x2="422" y2="195" stroke="#2563eb" stroke-width="2" marker-end="url(#arrowhead-blue)"/>
+  <text x="480" y="204" fill="#2563eb" font-size="10" font-weight="600">inbound read</text>
+
+  <!-- Dashboard panel -->
+  <rect x="260" y="85" width="160" height="50" rx="4" fill="#f8fafc" stroke="#94a3b8"/>
+  <text x="340" y="107" text-anchor="middle" font-weight="600" fill="#334155" font-size="12">Dashboard Panel</text>
+  <text x="340" y="122" text-anchor="middle" fill="#64748b" font-size="10">life-calendar-panel</text>
+
+  <!-- Arrow: Dashboard -> REST -->
+  <line x1="340" y1="135" x2="340" y2="158" stroke="#555" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="355" y="150" fill="#737373" font-size="10">fetch</text>
+</svg>

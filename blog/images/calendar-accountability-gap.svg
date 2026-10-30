@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 280" font-family="system-ui, -apple-system, sans-serif" font-size="13">
+  <rect width="720" height="280" fill="#fafafa" rx="8"/>
+
+  <text x="360" y="28" text-anchor="middle" font-size="15" font-weight="600" fill="#1a1a1a">The Accountability Gap in Personal Scheduling</text>
+
+  <!-- Without CaseHub column -->
+  <rect x="20" y="50" width="330" height="210" rx="6" fill="#fef2f2" stroke="#fca5a5"/>
+  <text x="185" y="72" text-anchor="middle" font-weight="700" fill="#991b1b" font-size="13">Without accountability</text>
+
+  <text x="40" y="100" fill="#7f1d1d" font-size="12">GP check-up deadline</text>
+  <text x="40" y="118" fill="#991b1b" font-size="11">→ Calendar reminder fires</text>
+  <text x="40" y="136" fill="#991b1b" font-size="11">→ Dismissed or missed</text>
+  <text x="40" y="154" fill="#dc2626" font-size="11" font-weight="600">→ No escalation. Forgotten.</text>
+
+  <text x="40" y="184" fill="#7f1d1d" font-size="12">Contractor visit window</text>
+  <text x="40" y="202" fill="#991b1b" font-size="11">→ Noted in calendar</text>
+  <text x="40" y="220" fill="#991b1b" font-size="11">→ No one follows up if they don't show</text>
+  <text x="40" y="238" fill="#dc2626" font-size="11" font-weight="600">→ Silently expires.</text>
+
+  <!-- With CaseHub column -->
+  <rect x="370" y="50" width="330" height="210" rx="6" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="535" y="72" text-anchor="middle" font-weight="700" fill="#166534" font-size="13">With accountability layer</text>
+
+  <text x="390" y="100" fill="#14532d" font-size="12">GP check-up deadline</text>
+  <text x="390" y="118" fill="#166534" font-size="11">→ Calendar event created from WorkItem</text>
+  <text x="390" y="136" fill="#166534" font-size="11">→ SLA breach triggers escalation</text>
+  <text x="390" y="154" fill="#16a34a" font-size="11" font-weight="600">→ Named GP contacted. Rescheduled.</text>
+
+  <text x="390" y="184" fill="#14532d" font-size="12">Contractor visit window</text>
+  <text x="390" y="202" fill="#166534" font-size="11">→ Calendar event + Watchdog commitment</text>
+  <text x="390" y="220" fill="#166534" font-size="11">→ Watchdog escalates if no ETA received</text>
+  <text x="390" y="238" fill="#16a34a" font-size="11" font-weight="600">→ Automated follow-up. Tracked.</text>
+</svg>
