@@ -1,5 +1,5 @@
 ---
-layout: post
+tlayout: post
 title: "Accountability Where It Actually Matters"
 date: 2026-10-30
 entry_type: article

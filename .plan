@@ -1,17 +1,18 @@
 # Work Plan — issue-136-wire-bank-commerce-sla
 
 ## State
-branch: issue-136-wire-bank-commerce-sla
+branch: 
 state: active
 project-sha: 
 date: 
 issue-repo: casehubio/life
-covers: 136,135,128
+covers: 136,135,128,111
 design-repo: 
 design-section-hashes: 
 flyway-next-v: 
 
 ## Queue
-- [ ] casehubio/life#136 — Issue #136 ← active
-- [ ] casehubio/life#135 — Wire CommercePlatform into workers
-- [ ] casehubio/life#128 — Restore overdue-task SLA escalation test
+- [x] casehubio/life#136 — Issue #136
+- [x] casehubio/life#135 — Wire CommercePlatform into workers
+- [x] casehubio/life#128 — Restore overdue-task SLA escalation test
+- [ ] casehubio/life#111 — Notification delivery
