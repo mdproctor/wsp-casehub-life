@@ -2,7 +2,7 @@
 
 ## State
 branch: 
-state: active
+state: closing:review
 project-sha: 
 date: 
 issue-repo: casehubio/life
@@ -11,6 +11,7 @@ design-repo:
 design-section-hashes: 
 flyway-next-v: 
 
+evidence-era: true
 ## Queue
 - [x] casehubio/life#136 — Issue #136
 - [x] casehubio/life#135 — Wire CommercePlatform into workers
