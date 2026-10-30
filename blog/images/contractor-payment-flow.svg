@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 340" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#475569"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#16a34a"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="340" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Title -->
+  <text x="400" y="30" text-anchor="middle" font-size="14" font-weight="600" fill="#1e293b">Contractor Payment: Before and After PISP</text>
+
+  <!-- BEFORE row -->
+  <text x="30" y="80" font-size="11" font-weight="600" fill="#94a3b8" letter-spacing="1">BEFORE</text>
+
+  <rect x="90" y="60" width="130" height="40" rx="6" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="155" y="84" text-anchor="middle" font-size="11" fill="#475569">payment-gate</text>
+  <text x="155" y="96" text-anchor="middle" font-size="9" fill="#94a3b8">humanTask</text>
+
+  <line x1="220" y1="80" x2="270" y2="80" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="270" y="60" width="130" height="40" rx="6" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="335" y="84" text-anchor="middle" font-size="11" fill="#475569">record-payment</text>
+  <text x="335" y="96" text-anchor="middle" font-size="9" fill="#94a3b8">ledger write only</text>
+
+  <line x1="400" y1="80" x2="450" y2="80" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="450" y="60" width="100" height="40" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="500" y="80" text-anchor="middle" font-size="11" fill="#92400e">send_chat</text>
+  <text x="500" y="92" text-anchor="middle" font-size="9" fill="#b45309">notify only</text>
+
+  <text x="610" y="84" font-size="10" fill="#dc2626" font-style="italic">No actual payment</text>
+
+  <!-- Divider -->
+  <line x1="30" y1="130" x2="770" y2="130" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4"/>
+
+  <!-- AFTER row -->
+  <text x="30" y="180" font-size="11" font-weight="600" fill="#16a34a" letter-spacing="1">AFTER</text>
+
+  <rect x="90" y="160" width="130" height="40" rx="6" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="155" y="184" text-anchor="middle" font-size="11" fill="#475569">payment-gate</text>
+  <text x="155" y="196" text-anchor="middle" font-size="9" fill="#94a3b8">humanTask</text>
+
+  <line x1="220" y1="180" x2="270" y2="180" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+  <rect x="270" y="155" width="130" height="50" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="335" y="178" text-anchor="middle" font-size="11" font-weight="600" fill="#166534">record-payment</text>
+  <text x="335" y="192" text-anchor="middle" font-size="9" fill="#16a34a">initiate + record</text>
+
+  <line x1="400" y1="172" x2="450" y2="172" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="400" y1="188" x2="450" y2="188" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+  <rect x="450" y="155" width="150" height="22" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/>
+  <text x="525" y="170" text-anchor="middle" font-size="10" fill="#1e40af">bank_initiate_payment</text>
+
+  <rect x="450" y="183" width="150" height="22" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/>
+  <text x="525" y="198" text-anchor="middle" font-size="10" fill="#1e40af">bank_get_payment_status</text>
+
+  <line x1="600" y1="180" x2="650" y2="180" stroke="#16a34a" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+  <rect x="650" y="165" width="100" height="30" rx="4" fill="#f0fdf4" stroke="#16a34a" stroke-width="1"/>
+  <text x="700" y="184" text-anchor="middle" font-size="10" fill="#166534">ledger + signal</text>
+
+  <!-- Accountability layer callout -->
+  <rect x="90" y="240" width="680" height="70" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1"/>
+  <text x="130" y="265" font-size="11" font-weight="600" fill="#1e40af">Accountability chain:</text>
+  <text x="130" y="285" font-size="10" fill="#3b82f6">household-admin approves (humanTask) -> bank initiates (PISP) -> Merkle ledger records (tamper-evident) -> financial-review case signalled</text>
+  <text x="130" y="300" font-size="9" fill="#64748b">Every step auditable. No silent payment. No missed follow-up.</text>
+</svg>

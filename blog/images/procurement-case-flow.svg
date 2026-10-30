@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#475569"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#d97706"/>
+    </marker>
+  </defs>
+
+  <rect width="800" height="300" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+
+  <text x="400" y="28" text-anchor="middle" font-size="14" font-weight="600" fill="#1e293b">Household Procurement: Playbook-Driven Case</text>
+
+  <!-- Main flow -->
+  <rect x="30" y="60" width="110" height="50" rx="6" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+  <text x="85" y="82" text-anchor="middle" font-size="10" font-weight="600" fill="#9a3412">procurementRequest</text>
+  <text x="85" y="96" text-anchor="middle" font-size="9" fill="#c2410c">gift / reorder / need</text>
+
+  <line x1="140" y1="85" x2="165" y2="85" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="165" y="60" width="100" height="50" rx="6" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="215" y="82" text-anchor="middle" font-size="10" fill="#475569">analyse-need</text>
+  <text x="215" y="96" text-anchor="middle" font-size="9" fill="#94a3b8">LLM worker</text>
+
+  <line x1="265" y1="85" x2="290" y2="85" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="290" y="55" width="120" height="60" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="350" y="78" text-anchor="middle" font-size="10" font-weight="600" fill="#1e40af">search-products</text>
+  <text x="350" y="92" text-anchor="middle" font-size="9" fill="#3b82f6">search_products</text>
+  <text x="350" y="104" text-anchor="middle" font-size="9" fill="#3b82f6">list_orders</text>
+
+  <line x1="410" y1="85" x2="435" y2="85" stroke="#d97706" stroke-width="1.5" marker-end="url(#arr-amber)"/>
+
+  <rect x="435" y="55" width="120" height="60" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="495" y="75" text-anchor="middle" font-size="10" font-weight="700" fill="#92400e">approve-purchase</text>
+  <text x="495" y="90" text-anchor="middle" font-size="9" fill="#b45309">humanTask</text>
+  <text x="495" y="104" text-anchor="middle" font-size="9" fill="#b45309">household-admin</text>
+
+  <line x1="555" y1="85" x2="580" y2="85" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="580" y="55" width="100" height="60" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="630" y="78" text-anchor="middle" font-size="10" font-weight="600" fill="#1e40af">fulfil-order</text>
+  <text x="630" y="92" text-anchor="middle" font-size="9" fill="#3b82f6">add_to_cart</text>
+  <text x="630" y="104" text-anchor="middle" font-size="9" fill="#3b82f6">checkout</text>
+
+  <line x1="680" y1="85" x2="705" y2="85" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <rect x="705" y="60" width="75" height="50" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="742" y="82" text-anchor="middle" font-size="10" fill="#166534">track</text>
+  <text x="742" y="96" text-anchor="middle" font-size="9" fill="#16a34a">list_orders</text>
+
+  <!-- Playbook layer -->
+  <rect x="30" y="150" width="750" height="55" rx="8" fill="#faf5ff" stroke="#c084fc" stroke-width="1"/>
+  <text x="55" y="172" font-size="11" font-weight="600" fill="#7c3aed">Playbook templates</text>
+  <text x="55" y="192" font-size="10" fill="#8b5cf6">product-search.playbook.yaml — REST calls to /api/connectors/commerce/* with retry + timeout</text>
+
+  <text x="500" y="172" font-size="11" font-weight="600" fill="#7c3aed">order-and-track.playbook.yaml</text>
+  <text x="500" y="192" font-size="10" fill="#8b5cf6">addToCart -> checkout -> sendChat confirmation</text>
+
+  <!-- Sentinel -->
+  <rect x="30" y="230" width="750" height="50" rx="8" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1"/>
+  <text x="55" y="252" font-size="11" font-weight="600" fill="#047857">procurement-sentinel</text>
+  <text x="55" y="268" font-size="10" fill="#059669">Persistent heartbeat (PT6H) — monitors delivery status, alerts on delays, triggers reorder suggestions</text>
+</svg>
