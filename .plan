@@ -13,12 +13,12 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/life#141 — Issue #141 ← active
-  - [ ] Batch 1: Foundation
-    - [ ] Task 1: TriageAction+TriageDecision+TriageRequest records
-    - [ ] Task 2: TriageRoundTracker with per-worker cap
-  - [ ] Batch 2: Executor
-    - [ ] Task 3: TriageExecutor four-action handler
-  - [ ] Batch 3: Integration
-    - [ ] Task 4: LifePlaybookRecoveryCoordinator SPI impl
-    - [ ] Task 5: LifePlaybookCbrWriter + cleanup observer
-    - [ ] Task 6: Engine PartialSuccess issue
+  - [x] Batch 1: Foundation
+    - [x] Task 1: TriageAction+TriageDecision+TriageRequest records
+    - [x] Task 2: TriageRoundTracker with per-worker cap
+  - [x] Batch 2: Executor
+    - [x] Task 3: TriageExecutor four-action handler
+  - [x] Batch 3: Integration
+    - [x] Task 4: LifePlaybookRecoveryCoordinator SPI impl
+    - [x] Task 5: LifePlaybookCbrWriter + cleanup observer
+    - [x] Task 6: Engine PartialSuccess issue
