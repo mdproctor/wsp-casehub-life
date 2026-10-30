@@ -2,7 +2,7 @@
 
 ## State
 branch: 
-state: closing:promoted
+state: closing:stamped
 project-sha: 
 date: 
 issue-repo: casehubio/life
