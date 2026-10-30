@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-141-playbook-failure-recovery
-state: closing:verified
+state: closing:promoted
 project-sha: 
 date: 
 issue-repo: casehubio/life
