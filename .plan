@@ -1,19 +1,15 @@
-# Work Plan — issue-136-wire-bank-commerce-sla
+# Work Plan — issue-142-calendar-conflict-detection
 
 ## State
-branch: 
-state: drained
+branch: issue-142-calendar-conflict-detection
+state: scaffolded
 project-sha: 
 date: 
 issue-repo: casehubio/life
 covers: 136,135,128,111
 design-repo: 
 design-section-hashes: 
-flyway-next-v: 
+flyway-next-v: none
 
-evidence-era: true
 ## Queue
-- [x] casehubio/life#136 — Issue #136
-- [x] casehubio/life#135 — Wire CommercePlatform into workers
-- [x] casehubio/life#128 — Restore overdue-task SLA escalation test
-- [ ] casehubio/life#111 — Notification delivery
+- [ ] casehubio/life#142 — Issue #142 ← active
