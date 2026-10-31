@@ -100,7 +100,7 @@ Add an inbound sync pipeline that detects external edits to CaseHub-managed cale
 | Component | Change |
 |-----------|--------|
 | `JpaLifeCalendarMapping` | Add `pushedTiming` column (JSON-serialized `EventTiming`), `version` column (optimistic locking) |
-| `LifeCalendarSyncService` | Populate pushed fields on every outbound create/update |
+| `LifeCalendarSyncService` | Populate pushed fields on every outbound create/update; auto-dismiss stale conflicts on outbound push and mapping deletion |
 | `life-calendar-panel` | Conflict indicators, diff display, resolution buttons, refresh button |
 
 ## Data Model
@@ -249,16 +249,20 @@ Quartz job, `@ApplicationScoped`, `@DisallowConcurrentExecution`.
 4. If `mapping.pushedTiming()` is null (pre-migration) → skip (no baseline to compare)
 5. Compare `CalendarEvent.summary()` against `mapping.summary()` and `CalendarEvent.timing()` against `mapping.pushedTiming()`. `EventTiming` comparison uses record equality — handles `AllDay`/`Timed` variant matching including `ZoneId` for timed events.
 6. If all match → skip (CaseHub's own update echoed back)
-7. If different → check `LifeCalendarConflictStore.findUnresolvedByMapping(mappingId)` for existing DETECTED conflict (idempotency)
-8. If no existing conflict → create `LifeCalendarConflict` with type=MODIFIED, status=DETECTED, populate `externalSummary` and `externalTiming` from `CalendarEvent`
-9. Fire `CalendarConflictDetected` CDI event
+7. If different → check `LifeCalendarConflictStore.findUnresolvedByMapping(mappingId)` for existing DETECTED conflict
+8. If existing unresolved conflict found:
+   - Compare `CalendarEvent.summary()` / `CalendarEvent.timing()` against the conflict's stored `externalSummary` / `externalTiming`
+   - If external values changed (subsequent external edit) → update the conflict's `externalSummary` and `externalTiming` with latest values, save, fire `CalendarConflictDetected` CDI event
+   - If external values unchanged → skip (true idempotency — same external state already captured)
+9. If no existing conflict → create `LifeCalendarConflict` with type=MODIFIED, status=DETECTED, populate `externalSummary` and `externalTiming` from `CalendarEvent`, fire `CalendarConflictDetected` CDI event
 
 **For each deleted event ID:**
 1. Look up mapping by `calendarEventId`
 2. No mapping → skip
-3. Check for existing unresolved conflict (idempotency)
-4. Create `LifeCalendarConflict` with type=DELETED, status=DETECTED, external fields null
-5. Fire `CalendarConflictDetected` CDI event
+3. If `mapping.entityType() != WORK_ITEM` → skip (consistent with changed-event filter)
+4. Check for existing unresolved conflict (idempotency)
+5. Create `LifeCalendarConflict` with type=DELETED, status=DETECTED, external fields null
+6. Fire `CalendarConflictDetected` CDI event
 
 ## Conflict Resolution
 
@@ -339,11 +343,22 @@ Capability tag mapping: domain → existing capability tags (e.g. HEALTH → "he
 
 ### LifeCalendarSyncService Extension
 
-On every outbound `syncWorkItem()` call (create or update), after the CalendarPlatform call succeeds:
-- Set `mapping.pushedTiming` = the `EventTiming` sent to the provider (same value passed to `EventDetails.timing()`)
-- Save the mapping (the existing `summary` field already stores the pushed summary — no separate `pushedSummary` needed)
+**Dependency addition:** `LifeCalendarSyncService` gains a dependency on `LifeCalendarConflictStore` and CDI `Event<CalendarConflictResolved>` for auto-dismissal of stale conflicts during outbound operations.
+
+**On outbound `syncWorkItem()` (create or update)**, after the CalendarPlatform call succeeds:
+1. Set `mapping.pushedTiming` = the `EventTiming` sent to the provider (same value passed to `EventDetails.timing()`)
+2. Save the mapping (the existing `summary` field already stores the pushed summary — no separate `pushedSummary` needed)
+3. **Auto-dismiss stale conflicts:** call `conflictStore.findUnresolvedByMapping(mapping.id())`. If a DETECTED conflict exists → set status=DISMISSED, resolvedAt=now, resolvedBy="life-system", save, fire `CalendarConflictResolved` CDI event.
+
+Step 3 prevents stale conflicts: the outbound push overwrites Google Calendar with CaseHub's current state, which is semantically identical to a manual dismiss. Without this, the user would see a conflict showing historical external values that Google no longer reflects — and accepting it would revert the WorkItem to a stale deadline.
 
 This establishes the baseline for conflict detection. After a push, any sync result that returns a different `summary` or `timing()` from the stored values indicates an external edit.
+
+**On `removeWorkItem()` (COMPLETED or CANCELLED)**, before deleting the mapping:
+1. Call `conflictStore.findUnresolvedByMapping(mapping.id())`. If a DETECTED conflict exists → set status=DISMISSED, resolvedAt=now, resolvedBy="life-system", save, fire `CalendarConflictResolved` CDI event.
+2. Then proceed with calendar event deletion and mapping deletion.
+
+Step 1 is mandatory: `life_calendar_conflict.mapping_id` has a FK constraint to `life_calendar_mapping(id)` with no CASCADE. Deleting the mapping while unresolved conflicts reference it would throw a FK violation. The auto-dismiss also ensures the user sees a clean resolution rather than an orphaned conflict pointing to a deleted mapping.
 
 ## UI Changes
 
@@ -409,7 +424,7 @@ Registered in `application.properties` per PP-20260607-4c59f4.
 
 **Integration tests (`@QuarkusTest`):**
 - `LifeCalendarInboundSyncJobTest` — full pipeline: seed mapping with pushed fields → mock CalendarPlatform to return changed event → verify conflict created, ledger entry written, SSE event fired
-- `LifeCalendarConflictServiceTest` — accept: verify WorkItem deadline updated, mapping pushed fields updated, conflict resolved. Dismiss: verify CalendarPlatform.updateEvent called, pushed fields updated.
+- `LifeCalendarConflictServiceTest` — accept: verify WorkItem deadline updated, mapping pushed fields updated, conflict resolved. Dismiss: verify CalendarPlatform.updateEvent called, pushed fields updated. Auto-dismiss: verify outbound push auto-dismisses existing DETECTED conflict, verify removeWorkItem auto-dismisses before mapping deletion.
 - `LifeCalendarConflictResourceTest` — REST endpoints: list, get, resolve, sync, count
 - `LifeCalendarSyncTokenExpiryTest` — mock SyncTokenExpiredException → verify recovery: token cleared, full re-sync, no false conflicts
 - `LifeCalendarConflictLedgerObserverTest` — verify ledger entries on detect and resolve events
@@ -421,6 +436,10 @@ Registered in `application.properties` per PP-20260607-4c59f4.
 - CalendarPlatform API failure during dismiss: verify transaction rollback, conflict stays DETECTED
 - Concurrent outbound push during dismiss: verify `OptimisticLockException` on mapping version conflict
 - Accept timing conversion: verify `AllDay → Instant` and `Timed → Instant` conversions for WorkItem `expiresAt`
+- Outbound push with existing DETECTED conflict: verify conflict auto-dismissed, ledger entry written, SSE event fired
+- WorkItem completion with existing DETECTED conflict: verify conflict auto-dismissed before mapping deletion (no FK violation)
+- Idempotency guard with updated external values: verify conflict's `externalSummary`/`externalTiming` refreshed to latest sync result
+- Deleted event for CASE_MILESTONE mapping: verify skipped (entityType filter on deleted path)
 
 ## Migration Sequence
 
