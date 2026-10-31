@@ -132,7 +132,7 @@ ALTER TABLE life_calendar_mapping
     ADD COLUMN pushed_end_time   TIMESTAMP;
 ```
 
-Populated by `LifeCalendarSyncService` on every outbound create/update. Null for mappings created before this migration (treated as "unknown pushed state" — first sync comparison will detect a change, which is correct: the conflict detector will create a conflict that the user can dismiss to establish the baseline).
+Populated by `LifeCalendarSyncService` on every outbound create/update. Null for mappings created before this migration (pre-migration state). The conflict detector skips mappings with null pushed fields — no baseline means no meaningful comparison. The next outbound push (from any WorkItem update or SLA change) establishes the baseline automatically.
 
 ### LifeCalendarConflict (V117)
 
