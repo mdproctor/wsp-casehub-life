@@ -48,15 +48,15 @@
 
 ## D5: Change detection mechanism
 
-**Choice:** Hash of last-pushed state — store SHA-256 of (summary, startTime, endTime) that CaseHub last pushed to the calendar provider
+**Choice:** Store pushed field values — add `pushedSummary`, `pushedStartTime`, `pushedEndTime` columns to `JpaLifeCalendarMapping`. When sync returns a changed event, compare returned values against stored pushed values. If different, it's an external edit.
 **Alternatives:**
-- Full snapshot of last-pushed fields — richer field-level diff but more storage and schema complexity
+- Hash of last-pushed state — compact (single column) but vulnerable to false positives from provider normalization (whitespace trimming, timezone canonicalization, duration rounding); cannot show field-level diff
 - ETag/version from provider — zero false positives but provider-dependent; not all providers support it
-**Rationale:** Hash is compact (single column), provider-agnostic, and sufficient to distinguish "our update echoed back" from "someone else changed it". Field-level diff isn't needed — the conflict UI shows the current external state vs CaseHub state, which is derivable from the WorkItem.
-**Trade-offs:** Cannot show "what specifically changed" from hash alone — but the current external state is visible in the sync result, and the CaseHub state is on the WorkItem, so a diff is constructable at display time.
-**Sources:** LifeCalendarMapping schema (V115), CalendarPlatform SyncResult
-**Exploration:** quick
-**Status:** captured
+**Rationale:** Stored field values avoid hash collision and normalization false positives. Comparison uses the values as returned by the provider (not as computed before push), eliminating provider normalization artifacts. Enables field-level diff at query time ("start changed from Tue to Thu"). The mapping table has one row per event — the additional storage is negligible.
+**Trade-offs:** Three additional columns on the mapping table (V116 migration). Slightly more complex comparison logic than a single hash comparison.
+**Sources:** LifeCalendarMapping schema (V115), CalendarPlatform SyncResult, R1-03 decision review finding (provider normalization false positives)
+**Exploration:** quick → revised after decision review
+**Status:** revised
 
 ## D6: Sync token storage
 
@@ -103,4 +103,28 @@
 **Depends on:** D1 (detect+notify semantics), D6 (sync state storage)
 **Sources:** LifeDecisionLedgerObserver pattern, LifeCalendarOutboundObserver pattern, CDI event patterns throughout casehub-life
 **Exploration:** quick
+**Status:** captured
+
+## D10: Conflict data model
+
+**Choice:** New JPA entity `LifeCalendarConflict` with its own lifecycle, behind a `LifeCalendarConflictStore` SPI in api/
+**Alternatives:**
+- Status field on LifeCalendarMapping — conflates mapping lifecycle with conflict lifecycle; a mapping can have zero or many conflicts over its lifetime
+- Transient object — no persistence means no foreign key for ledger entries, no queryable conflict history, and conflicts lost on restart
+**Rationale:** A conflict has its own identity (detection time, conflict type, external state snapshot, resolution), its own lifecycle (DETECTED → ACCEPTED/DISMISSED), and is referenced by ledger entries. This warrants a dedicated entity. Fields: `{id, mappingId, conflictType (MODIFIED/DELETED), detectedAt, externalSummary, externalStartTime, externalEndTime, status (DETECTED/ACCEPTED/DISMISSED), resolvedAt, resolvedBy}`. SPI in api/ follows LifeCalendarMappingStore pattern.
+**Trade-offs:** Additional entity, migration (V117), and SPI. Justified by the conflict lifecycle requirements and audit trail foreign key.
+**Depends on:** D5 (stored field values enable field-level diff in conflict record)
+**Sources:** R1-05 decision review finding, LifeCalendarMappingStore pattern
+**Exploration:** quick (gap identified by decision review)
+**Status:** captured
+
+## D11: Single-calendar scope
+
+**Choice:** Single calendar (default platformId + calendarId) for this issue. Data model supports multi-calendar (LifeCalendarSyncState is per-platformId/calendarId pair) but the sync pipeline and UI assume one calendar.
+**Alternatives:**
+- Multi-calendar now — support multiple calendars from the start; adds configuration UI, per-calendar sync scheduling, and domain→calendar routing. Significantly larger scope.
+**Rationale:** The existing infrastructure from #114 is single-calendar. Extending the data model to be multi-calendar-ready (D6 already is) while keeping the pipeline single-calendar avoids premature complexity. Multi-calendar can be added as a follow-up.
+**Trade-offs:** Users with domain-specific calendars (health on one, family on another) must consolidate to a single calendar for now.
+**Sources:** R1-10 decision review finding, LifeCalendarSyncService config keys, CalendarPlatform.listEventsSync(calendarId)
+**Exploration:** quick (implicit assumption made explicit by decision review)
 **Status:** captured
