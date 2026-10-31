@@ -27,11 +27,12 @@ Add an inbound sync pipeline that detects external edits to CaseHub-managed cale
 - UI: conflict indicators, diff display, resolution buttons in existing calendar panel
 - Sync token expiry recovery (full re-sync without false conflicts)
 
-**Out of scope (explicit):**
-- Multi-calendar support — data model is ready (LifeCalendarSyncState per platformId/calendarId) but pipeline and UI assume single default calendar (D11)
-- Push notifications / webhook triggers — requires CalendarPlatform SPI extension and publicly-accessible endpoint; polling is the primary trigger for this issue
-- Domain-specific resolution strategies — all domains use detect+notify uniformly
-- Calendar conflict escalation — no automatic escalation for unresolved conflicts; existing SLA breach policy handles deadline enforcement independently
+**Out of scope (explicit) — each tracked as a follow-up GitHub issue:**
+- Multi-calendar support — data model is ready (LifeCalendarSyncState per platformId/calendarId) but pipeline and UI assume single default calendar (D11) → casehubio/life#TBD-multi-calendar
+- Push notifications / webhook triggers — requires CalendarPlatform SPI extension and publicly-accessible endpoint; polling is the primary trigger for this issue → casehubio/life#TBD-calendar-webhooks
+- Domain-specific resolution strategies — all domains use detect+notify uniformly → casehubio/life#TBD-domain-resolution
+- Calendar conflict escalation — no automatic escalation for unresolved conflicts; existing SLA breach policy handles deadline enforcement independently → casehubio/life#TBD-conflict-escalation
+- `CASE_MILESTONE` conflict detection — `CalendarEntityType.CASE_MILESTONE` mappings exist in the enum but accept/dismiss semantics for milestones are undefined; the conflict detector explicitly filters to `WORK_ITEM` entities → casehubio/life#TBD-milestone-conflicts
 
 ## Architecture
 
@@ -98,7 +99,7 @@ Add an inbound sync pipeline that detects external edits to CaseHub-managed cale
 
 | Component | Change |
 |-----------|--------|
-| `JpaLifeCalendarMapping` | Add `pushedSummary`, `pushedStartTime`, `pushedEndTime` columns |
+| `JpaLifeCalendarMapping` | Add `pushedTiming` column (JSON-serialized `EventTiming`), `version` column (optimistic locking) |
 | `LifeCalendarSyncService` | Populate pushed fields on every outbound create/update |
 | `life-calendar-panel` | Conflict indicators, diff display, resolution buttons, refresh button |
 
@@ -127,12 +128,41 @@ One row per calendar being watched. `syncToken` is null before the first success
 
 ```sql
 ALTER TABLE life_calendar_mapping
-    ADD COLUMN pushed_summary    VARCHAR(500),
-    ADD COLUMN pushed_start_time TIMESTAMP,
-    ADD COLUMN pushed_end_time   TIMESTAMP;
+    ADD COLUMN pushed_timing TEXT,
+    ADD COLUMN version       BIGINT NOT NULL DEFAULT 0;
+
+CREATE INDEX idx_calendar_mapping_event_id ON life_calendar_mapping(calendar_event_id);
 ```
 
-Populated by `LifeCalendarSyncService` on every outbound create/update. Null for mappings created before this migration (pre-migration state). The conflict detector skips mappings with null pushed fields — no baseline means no meaningful comparison. The next outbound push (from any WorkItem update or SLA change) establishes the baseline automatically.
+**`pushed_timing`:** JSON-serialized `EventTiming` (the sealed interface with `AllDay(LocalDate, LocalDate)` and `Timed(Instant, Instant, ZoneId)` variants). Uses the existing Jackson `@JsonTypeInfo` configuration. Populated by `LifeCalendarSyncService` on every outbound create/update. Null for mappings created before this migration (pre-migration state). The conflict detector skips mappings with null `pushedTiming` — no baseline means no meaningful comparison. The next outbound push (from any WorkItem update or SLA change) establishes the baseline automatically.
+
+**`version`:** JPA `@Version` column for optimistic locking. Prevents the race between concurrent outbound push (`LifeCalendarOutboundObserver` → `syncWorkItem()`) and conflict resolution (dismiss → `CalendarPlatform.updateEvent()`). If a mapping is modified concurrently, the losing transaction throws `OptimisticLockException` and the operation is retried.
+
+**`idx_calendar_mapping_event_id`:** Index on `calendar_event_id` for `findByCalendarEventId()` lookups during conflict detection.
+
+**Summary baseline:** The existing `summary` column (V115) already stores the pushed summary — the value sent to the calendar provider on outbound create/update. No separate `pushedSummary` column is needed. The conflict detector compares `CalendarEvent.summary()` against `mapping.summary()`.
+
+### LifeCalendarMapping SPI Evolution
+
+The `LifeCalendarMapping` api record gains one field:
+
+```java
+public record LifeCalendarMapping(
+        UUID id, CalendarEntityType entityType, String entityId,
+        String calendarPlatformId, String calendarId, String calendarEventId,
+        LifeDomain domain, String summary, EventTiming pushedTiming,
+        Instant createdAt, Instant updatedAt) {}
+```
+
+This breaks all callers of the constructor — the migration is mechanical. Affected call sites:
+- `LifeCalendarSyncService.syncWorkItem()` — must pass `EventTiming` from `buildTiming()`
+- `JpaLifeCalendarMappingStore.save()` / `toRecord()` — must persist/restore `pushedTiming` via Jackson serialization
+- `InMemoryLifeCalendarMappingStore` — no change (stores the record as-is)
+- `LifeCalendarMappingTest` and all integration tests constructing mappings
+
+The `JpaLifeCalendarMapping` JPA entity adds:
+- `public String pushedTiming;` — TEXT column, Jackson-serialized `EventTiming`
+- `@Version public long version;` — optimistic locking
 
 ### LifeCalendarConflict (V117)
 
@@ -143,8 +173,7 @@ CREATE TABLE life_calendar_conflict (
     conflict_type     VARCHAR(20) NOT NULL,  -- MODIFIED, DELETED
     detected_at       TIMESTAMP   NOT NULL,
     external_summary  VARCHAR(500),          -- null for DELETED
-    external_start_time TIMESTAMP,           -- null for DELETED
-    external_end_time   TIMESTAMP,           -- null for DELETED
+    external_timing   TEXT,                  -- JSON-serialized EventTiming, null for DELETED
     status            VARCHAR(20) NOT NULL,  -- DETECTED, ACCEPTED, DISMISSED
     resolved_at       TIMESTAMP,
     resolved_by       VARCHAR(255),
@@ -191,7 +220,7 @@ Quartz job, `@ApplicationScoped`, `@DisallowConcurrentExecution`.
 
 **Normal flow (sync token present):**
 1. Load `LifeCalendarSyncState` for (defaultPlatformId, defaultCalendarId)
-2. Call `CalendarPlatform.listEventsSync(calendarId, SyncRequest.withToken(syncToken))`
+2. Call `CalendarPlatform.listEventsSync(calendarId, new SyncRequest(syncToken, pageSize))`
 3. If `hasMore`: paginate until all pages consumed
 4. Pass all `SyncResult.items()` and `SyncResult.deletedIds()` to `LifeCalendarConflictDetector`
 5. Update `syncToken` and `lastSyncAt` on sync state
@@ -200,7 +229,7 @@ Quartz job, `@ApplicationScoped`, `@DisallowConcurrentExecution`.
 **Initial sync (no sync token):**
 1. Call `CalendarPlatform.listEventsSync(calendarId, SyncRequest.initial(pageSize))`
 2. Paginate until complete
-3. For each event: look up mapping by `calendarEventId`. If mapped and pushed fields are populated, run conflict detection. If mapped but pushed fields are null (pre-migration mapping), skip conflict detection for this event.
+3. For each event: look up mapping by `calendarEventId`. If mapped and `pushedTiming` is populated, run conflict detection. If mapped but `pushedTiming` is null (pre-migration mapping), skip conflict detection for this event.
 4. Store the sync token
 
 **Sync token expiry recovery:**
@@ -216,12 +245,13 @@ Quartz job, `@ApplicationScoped`, `@DisallowConcurrentExecution`.
 **For each changed event in sync results:**
 1. Look up mapping by `calendarEventId` via `LifeCalendarMappingStore.findByCalendarEventId()`
 2. No mapping → skip (not CaseHub-managed)
-3. Compare returned `(summary, startTime, endTime)` against mapping's `(pushedSummary, pushedStartTime, pushedEndTime)`
-4. If pushed fields are null (pre-migration) → skip (no baseline to compare)
-5. If all match → skip (CaseHub's own update echoed back)
-6. If different → check `LifeCalendarConflictStore.findUnresolvedByMapping(mappingId)` for existing DETECTED conflict (idempotency)
-7. If no existing conflict → create `LifeCalendarConflict` with type=MODIFIED, status=DETECTED, populate external fields from sync result
-8. Fire `CalendarConflictDetected` CDI event
+3. If `mapping.entityType() != WORK_ITEM` → skip (only WorkItem conflicts are supported; `CASE_MILESTONE` conflict semantics are deferred — see casehubio/life#TBD)
+4. If `mapping.pushedTiming()` is null (pre-migration) → skip (no baseline to compare)
+5. Compare `CalendarEvent.summary()` against `mapping.summary()` and `CalendarEvent.timing()` against `mapping.pushedTiming()`. `EventTiming` comparison uses record equality — handles `AllDay`/`Timed` variant matching including `ZoneId` for timed events.
+6. If all match → skip (CaseHub's own update echoed back)
+7. If different → check `LifeCalendarConflictStore.findUnresolvedByMapping(mappingId)` for existing DETECTED conflict (idempotency)
+8. If no existing conflict → create `LifeCalendarConflict` with type=MODIFIED, status=DETECTED, populate `externalSummary` and `externalTiming` from `CalendarEvent`
+9. Fire `CalendarConflictDetected` CDI event
 
 **For each deleted event ID:**
 1. Look up mapping by `calendarEventId`
@@ -240,9 +270,12 @@ Quartz job, `@ApplicationScoped`, `@DisallowConcurrentExecution`.
 1. Load conflict by ID, verify status is DETECTED (409 if already resolved)
 2. Load mapping by `conflict.mappingId`
 3. If MODIFIED:
-   - Load WorkItem by `mapping.entityId` (entityType is WORK_ITEM)
-   - Update WorkItem `expiresAt` to match external timing
-   - Update mapping's pushed fields to match external values
+   - Load WorkItem by `mapping.entityId`
+   - Convert external `EventTiming` to `Instant` for `WorkItem.expiresAt`:
+     - `AllDay(start, end)` → `start.atStartOfDay(ZoneOffset.UTC).toInstant()`
+     - `Timed(start, end, timeZone)` → `end` (the end instant is the deadline)
+   - Update WorkItem `expiresAt` with the converted instant
+   - Update `mapping.summary` to `conflict.externalSummary` and `mapping.pushedTiming` to `conflict.externalTiming`
 4. If DELETED:
    - Delete the mapping (WorkItem keeps its deadline)
 5. Set conflict: status=ACCEPTED, resolvedAt=now, resolvedBy=currentPrincipal.actorId()
@@ -253,12 +286,12 @@ Quartz job, `@ApplicationScoped`, `@DisallowConcurrentExecution`.
 2. Load mapping by `conflict.mappingId`
 3. Load WorkItem by `mapping.entityId`
 4. If MODIFIED:
-   - Call `CalendarPlatform.updateEvent()` with CaseHub's current WorkItem state
-   - Update mapping's pushed fields
+   - Call `CalendarPlatform.updateEvent()` with CaseHub's current WorkItem state (rebuild `EventDetails` from WorkItem via `buildTiming()`)
+   - Update `mapping.pushedTiming` to match the timing just pushed
 5. If DELETED:
-   - Staleness guard: call `CalendarPlatform.listEvents()` and check for existing event with matching summary and timing to prevent duplicates
+   - Staleness guard: call `CalendarPlatform.listEvents(calendarId, from, to)` where `from`/`to` span the WorkItem's timing ± 1 day (derived from `buildTiming(workItem.expiresAt)`). Check for existing event with matching summary and timing to prevent duplicates. Note: a manually-created event with the same title could produce a false positive, suppressing recreation — this is an accepted pragmatic trade-off (false positive prevents a duplicate; false negative produces a benign duplicate the user can delete).
    - Call `CalendarPlatform.createEvent()` to recreate
-   - Update mapping with new `calendarEventId` and pushed fields
+   - Update mapping with new `calendarEventId` and `pushedTiming`
 6. Set conflict: status=DISMISSED, resolvedAt=now, resolvedBy=currentPrincipal.actorId()
 7. Fire `CalendarConflictResolved` CDI event
 
@@ -281,12 +314,12 @@ Quartz job, `@ApplicationScoped`, `@DisallowConcurrentExecution`.
 **CalendarConflictResponse** (api/ record):
 ```
 {id, mappingId, conflictType, detectedAt, status, resolvedAt, resolvedBy, domain,
- casehubSummary, casehubStartTime, casehubEndTime,
- externalSummary, externalStartTime, externalEndTime,
+ casehubSummary, casehubTiming,
+ externalSummary, externalTiming,
  entityType, entityId}
 ```
 
-CaseHub-side fields derived from WorkItem at query time (not stored on conflict — always shows current CaseHub state).
+`casehubTiming` and `casehubSummary` are derived from the current WorkItem at query time (not stored on conflict — always shows current CaseHub state). `casehubTiming` is built via `buildTiming(workItem.expiresAt)`. `externalTiming` is the `EventTiming` stored on the conflict entity. Both serialize as JSON with `@type` discriminator (`AllDay` or `Timed`), matching the existing `LifeCalendarEventResponse.timing` serialization.
 
 **ResolveConflictRequest** (api/ record): `{action: "ACCEPT" | "DISMISS"}`
 
@@ -307,12 +340,10 @@ Capability tag mapping: domain → existing capability tags (e.g. HEALTH → "he
 ### LifeCalendarSyncService Extension
 
 On every outbound `syncWorkItem()` call (create or update), after the CalendarPlatform call succeeds:
-- Set `mapping.pushedSummary` = the summary sent to the provider
-- Set `mapping.pushedStartTime` = the start time sent
-- Set `mapping.pushedEndTime` = the end time sent
-- Save the mapping
+- Set `mapping.pushedTiming` = the `EventTiming` sent to the provider (same value passed to `EventDetails.timing()`)
+- Save the mapping (the existing `summary` field already stores the pushed summary — no separate `pushedSummary` needed)
 
-This establishes the baseline for conflict detection. After a push, any sync result that returns different values for these fields indicates an external edit.
+This establishes the baseline for conflict detection. After a push, any sync result that returns a different `summary` or `timing()` from the stored values indicates an external edit.
 
 ## UI Changes
 
@@ -338,9 +369,13 @@ This establishes the baseline for conflict detection. After a push, any sync res
 
 ### SSE Events
 
-New event types via `LifeEventBroadcaster`:
-- `calendar.conflict.detected` — payload: `{conflictId, conflictType, domain, entityId}`
-- `calendar.conflict.resolved` — payload: `{conflictId, resolution}`
+New `LifeEventType` enum values:
+- `CALENDAR_CONFLICT_DETECTED`
+- `CALENDAR_CONFLICT_RESOLVED`
+
+Broadcast via `LifeEventBroadcaster.publish(LifeSseEvent.of(type, data))`:
+- `CALENDAR_CONFLICT_DETECTED` — payload: `{conflictId, conflictType, domain, entityId}`
+- `CALENDAR_CONFLICT_RESOLVED` — payload: `{conflictId, resolution}`
 
 `LifeEventController` in life-ui subscribes to these for real-time badge updates and panel refresh.
 
@@ -359,10 +394,16 @@ casehub:
 
 Registered in `application.properties` per PP-20260607-4c59f4.
 
+## Known Limitations
+
+**Orphaned ledger entries on batch sync rollback:** The sync job wraps conflict detection + sync token update in a single transaction. `LifeCalendarConflictLedgerObserver` uses `@Transactional(REQUIRES_NEW)` — the same pattern as `LifeDecisionLedgerObserver`. If the main transaction rolls back after CDI events have fired (e.g., a later conflict creation fails), already-committed ledger entries become orphaned (audit records for conflicts that don't exist). This is a minor data quality issue, not a correctness issue — the tamper-evident ledger is append-only and orphaned entries don't break the hash chain. The next sync re-processes the events and creates the conflicts correctly. Accepted as consistent with existing platform patterns.
+
+**Resolved conflict retention:** Resolved conflicts (ACCEPTED/DISMISSED) remain in `life_calendar_conflict` indefinitely. At household scale (dozens of conflicts per month), this is acceptable for years. Retention policy deferred → casehubio/life#TBD-conflict-retention.
+
 ## Testing Strategy
 
 **Unit tests:**
-- `LifeCalendarConflictDetectorTest` — compare logic: matching fields (no conflict), differing fields (MODIFIED), deleted IDs (DELETED), idempotency (existing unresolved conflict), null pushed fields (pre-migration skip)
+- `LifeCalendarConflictDetectorTest` — compare logic: matching fields (no conflict), differing fields (MODIFIED), deleted IDs (DELETED), idempotency (existing unresolved conflict), null `pushedTiming` (pre-migration skip), `CASE_MILESTONE` entity type (skip), `AllDay` vs `Timed` variant change detection, `Timed` timezone change detection
 - `CalendarConflictLedgerEntryDomainContentBytesTest` — `domainContentBytes()` field joining
 - `CalendarConflictLedgerEntry` build-time validator
 
@@ -376,8 +417,10 @@ Registered in `application.properties` per PP-20260607-4c59f4.
 **Robustness tests:**
 - Concurrent sync: verify `@DisallowConcurrentExecution` prevents duplicate processing
 - Dismiss-after-delete staleness: mock existing event in calendar → verify no duplicate created
-- Pre-migration mappings (null pushed fields): verify no false conflicts
+- Pre-migration mappings (null `pushedTiming`): verify no false conflicts
 - CalendarPlatform API failure during dismiss: verify transaction rollback, conflict stays DETECTED
+- Concurrent outbound push during dismiss: verify `OptimisticLockException` on mapping version conflict
+- Accept timing conversion: verify `AllDay → Instant` and `Timed → Instant` conversions for WorkItem `expiresAt`
 
 ## Migration Sequence
 
