@@ -2,7 +2,7 @@
 
 ## State
 branch: issue-142-calendar-conflict-detection
-state: active
+state: closing:review
 project-sha: 
 date: 
 issue-repo: casehubio/life
@@ -11,21 +11,6 @@ design-repo:
 design-section-hashes: 
 flyway-next-v: none
 
+evidence-era: true
 ## Queue
-- [ ] casehubio/life#142 — Issue #142 ← active
-  - [x] Batch 1: Data Model
-    - [x] Task 1: SyncState entity+SPI+stores
-    - [x] Task 2: Extend mapping with pushedTiming
-    - [x] Task 3: Conflict entity+SPI+stores
-  - [x] Batch 2: Sync Pipeline
-    - [x] Task 4: CDI events+LifeEventType
-    - [x] Task 5: ConflictDetector
-    - [x] Task 6: InboundSyncJob
-  - [x] Batch 3: Resolution+Audit
-    - [x] Task 7: LedgerEntry
-    - [x] Task 8: LedgerObserver
-    - [x] Task 9: ConflictService
-    - [x] Task 10: Outbound push changes
-    - [x] Task 11: REST endpoints
-  - [x] Batch 4: UI
-    - [x] Task 12: Calendar panel conflicts
+- [x] casehubio/life#142 — Issue #142
