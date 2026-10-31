@@ -69,4 +69,4 @@ The pattern here — detect external changes, surface them as conflicts, require
 
 Bank transactions that don't match expected contractor payments. IoT sensor readings that contradict a maintenance schedule. Insurance documents that arrive with different terms than what was quoted. Each of these is the same structural problem: an external system reports something that diverges from CaseHub's tracked state, and the divergence needs a human decision, not an automatic merge.
 
-The calendar implementation is a worked example of a more general principle: accountability systems that auto-reconcile with external state are accountability systems that can be silently undermined. The human in the loop is not a UX inconvenience — it is the mechanism that makes the accountability property real.
+The calendar implementation is a worked example of a more general principle: accountability systems that auto-reconcile with external state are accountability systems that can be silently undermined. The human in the loop is not a UX inconvenience — it is the mechanism that makes the accountability property real. 
