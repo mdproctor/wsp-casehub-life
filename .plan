@@ -13,3 +13,19 @@ flyway-next-v: none
 
 ## Queue
 - [ ] casehubio/life#142 — Issue #142 ← active
+  - [ ] Batch 1: Data Model
+    - [ ] Task 1: SyncState entity+SPI+stores
+    - [ ] Task 2: Extend mapping with pushedTiming
+    - [ ] Task 3: Conflict entity+SPI+stores
+  - [ ] Batch 2: Sync Pipeline
+    - [ ] Task 4: CDI events+LifeEventType
+    - [ ] Task 5: ConflictDetector
+    - [ ] Task 6: InboundSyncJob
+  - [ ] Batch 3: Resolution+Audit
+    - [ ] Task 7: LedgerEntry
+    - [ ] Task 8: LedgerObserver
+    - [ ] Task 9: ConflictService
+    - [ ] Task 10: Outbound push changes
+    - [ ] Task 11: REST endpoints
+  - [ ] Batch 4: UI
+    - [ ] Task 12: Calendar panel conflicts
