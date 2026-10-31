@@ -191,6 +191,7 @@ CREATE INDEX idx_calendar_conflict_mapping ON life_calendar_conflict(mapping_id)
 - `List<LifeCalendarConflict> findUnresolved()`
 - `long countUnresolved()`
 - `Optional<LifeCalendarConflict> findUnresolvedByMapping(UUID mappingId)`
+- `void deleteByMapping(UUID mappingId)` — deletes ALL conflict rows (resolved and unresolved) for a mapping. Required before mapping deletion to satisfy the FK constraint. Audit trail is preserved in `CalendarConflictLedgerEntry` (which stores `conflict_id` as a UUID value, not a FK to this table).
 
 ### CalendarConflictLedgerEntry (V2102, qhorus PU)
 
@@ -280,10 +281,13 @@ Quartz job, `@ApplicationScoped`, `@DisallowConcurrentExecution`.
      - `Timed(start, end, timeZone)` → `end` (the end instant is the deadline)
    - Update WorkItem `expiresAt` with the converted instant
    - Update `mapping.summary` to `conflict.externalSummary` and `mapping.pushedTiming` to `conflict.externalTiming`
+   - Set conflict: status=ACCEPTED, resolvedAt=now, resolvedBy=currentPrincipal.actorId()
+   - Fire `CalendarConflictResolved` CDI event
 4. If DELETED:
-   - Delete the mapping (WorkItem keeps its deadline)
-5. Set conflict: status=ACCEPTED, resolvedAt=now, resolvedBy=currentPrincipal.actorId()
-6. Fire `CalendarConflictResolved` CDI event
+   - Fire `CalendarConflictResolved` CDI event with resolution=ACCEPTED, resolvedBy=currentPrincipal.actorId() (triggers ledger entry in REQUIRES_NEW — committed independently)
+   - `conflictStore.deleteByMapping(mapping.id())` — removes all conflict rows for this mapping (the current conflict and any historical resolved conflicts). The audit trail is preserved in `CalendarConflictLedgerEntry`.
+   - `mappingStore.delete(mapping.id())` — FK satisfied, mapping can be deleted
+   - (WorkItem keeps its deadline)
 
 **Dismiss:**
 1. Load conflict by ID, verify status is DETECTED
@@ -355,10 +359,11 @@ Step 3 prevents stale conflicts: the outbound push overwrites Google Calendar wi
 This establishes the baseline for conflict detection. After a push, any sync result that returns a different `summary` or `timing()` from the stored values indicates an external edit.
 
 **On `removeWorkItem()` (COMPLETED or CANCELLED)**, before deleting the mapping:
-1. Call `conflictStore.findUnresolvedByMapping(mapping.id())`. If a DETECTED conflict exists → set status=DISMISSED, resolvedAt=now, resolvedBy="life-system", save, fire `CalendarConflictResolved` CDI event.
-2. Then proceed with calendar event deletion and mapping deletion.
+1. Call `conflictStore.findUnresolvedByMapping(mapping.id())`. For each DETECTED conflict → fire `CalendarConflictResolved` CDI event with resolution=DISMISSED, resolvedBy="life-system" (triggers ledger entry and SSE notification in REQUIRES_NEW).
+2. Call `conflictStore.deleteByMapping(mapping.id())` — removes ALL conflict rows for this mapping (the just-dismissed ones from step 1 AND any historical resolved conflicts from earlier detection/resolution cycles). The audit trail is preserved in `CalendarConflictLedgerEntry`.
+3. Proceed with calendar event deletion and `mappingStore.delete(mapping.id())`.
 
-Step 1 is mandatory: `life_calendar_conflict.mapping_id` has a FK constraint to `life_calendar_mapping(id)` with no CASCADE. Deleting the mapping while unresolved conflicts reference it would throw a FK violation. The auto-dismiss also ensures the user sees a clean resolution rather than an orphaned conflict pointing to a deleted mapping.
+Steps 1-2 are mandatory: `life_calendar_conflict.mapping_id` has a FK constraint to `life_calendar_mapping(id)` with no CASCADE. ANY conflict row (DETECTED, ACCEPTED, or DISMISSED) referencing the mapping blocks its deletion. Step 1 ensures proper audit trail for unresolved conflicts; step 2 removes all rows to satisfy the FK.
 
 ## UI Changes
 
@@ -437,7 +442,9 @@ Registered in `application.properties` per PP-20260607-4c59f4.
 - Concurrent outbound push during dismiss: verify `OptimisticLockException` on mapping version conflict
 - Accept timing conversion: verify `AllDay → Instant` and `Timed → Instant` conversions for WorkItem `expiresAt`
 - Outbound push with existing DETECTED conflict: verify conflict auto-dismissed, ledger entry written, SSE event fired
-- WorkItem completion with existing DETECTED conflict: verify conflict auto-dismissed before mapping deletion (no FK violation)
+- WorkItem completion with existing DETECTED conflict: verify conflict auto-dismissed, conflict rows deleted, mapping deleted (no FK violation)
+- WorkItem completion with historical resolved conflicts: verify all conflict rows deleted before mapping deletion (ACCEPTED/DISMISSED rows also block FK)
+- Accept-for-DELETED with historical conflicts: verify all conflict rows deleted before mapping deletion
 - Idempotency guard with updated external values: verify conflict's `externalSummary`/`externalTiming` refreshed to latest sync result
 - Deleted event for CASE_MILESTONE mapping: verify skipped (entityType filter on deleted path)
 
