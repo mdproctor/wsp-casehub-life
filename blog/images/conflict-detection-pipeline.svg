@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 420" font-family="system-ui, -apple-system, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#737373"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#d97706"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="780" height="420" fill="#fafafa" rx="8"/>
+
+  <!-- Title -->
+  <text x="390" y="30" text-anchor="middle" font-size="15" font-weight="600" fill="#111">Calendar Conflict Detection Pipeline</text>
+
+  <!-- Google Calendar box -->
+  <rect x="30" y="60" width="140" height="50" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+  <text x="100" y="82" text-anchor="middle" font-weight="600" fill="#0c4a6e" font-size="12">Google Calendar</text>
+  <text x="100" y="98" text-anchor="middle" fill="#0c4a6e" font-size="11">external edits</text>
+
+  <!-- Arrow: Google → SyncJob -->
+  <line x1="170" y1="85" x2="220" y2="85" stroke="#737373" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="195" y="78" text-anchor="middle" fill="#737373" font-size="10">sync token</text>
+
+  <!-- SyncJob box -->
+  <rect x="225" y="60" width="150" height="50" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="300" y="82" text-anchor="middle" font-weight="600" fill="#14532d" font-size="12">InboundSyncJob</text>
+  <text x="300" y="98" text-anchor="middle" fill="#14532d" font-size="11">Quartz · PT5M</text>
+
+  <!-- Arrow: SyncJob → Detector -->
+  <line x1="375" y1="85" x2="430" y2="85" stroke="#737373" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="402" y="78" text-anchor="middle" fill="#737373" font-size="10">events</text>
+
+  <!-- Detector box -->
+  <rect x="435" y="60" width="150" height="50" rx="6" fill="#fff7ed" stroke="#d97706" stroke-width="1.5"/>
+  <text x="510" y="82" text-anchor="middle" font-weight="600" fill="#78350f" font-size="12">ConflictDetector</text>
+  <text x="510" y="98" text-anchor="middle" fill="#78350f" font-size="11">compare · idempotent</text>
+
+  <!-- Arrow: Detector → Conflict Store -->
+  <line x1="510" y1="110" x2="510" y2="150" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+
+  <!-- Conflict Store -->
+  <rect x="435" y="155" width="150" height="45" rx="6" fill="#fffbeb" stroke="#d97706" stroke-width="1.5"/>
+  <text x="510" y="175" text-anchor="middle" font-weight="600" fill="#78350f" font-size="12">CalendarConflict</text>
+  <text x="510" y="191" text-anchor="middle" fill="#78350f" font-size="11">DETECTED → resolve</text>
+
+  <!-- Arrow: Detector → CDI Event -->
+  <line x1="585" y1="85" x2="630" y2="85" stroke="#737373" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- CDI Event -->
+  <rect x="635" y="60" width="120" height="50" rx="6" fill="#f5f3ff" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="695" y="82" text-anchor="middle" font-weight="600" fill="#3b0764" font-size="12">CDI Event</text>
+  <text x="695" y="98" text-anchor="middle" fill="#3b0764" font-size="11">fire · observe</text>
+
+  <!-- Arrow: CDI → Ledger -->
+  <line x1="695" y1="110" x2="695" y2="150" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Ledger -->
+  <rect x="635" y="155" width="120" height="45" rx="6" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="695" y="175" text-anchor="middle" font-weight="600" fill="#3b0764" font-size="12">Ledger Entry</text>
+  <text x="695" y="191" text-anchor="middle" fill="#3b0764" font-size="11">tamper-evident</text>
+
+  <!-- Resolution section -->
+  <text x="390" y="240" text-anchor="middle" font-size="14" font-weight="600" fill="#111">Resolution Flow</text>
+
+  <!-- User box -->
+  <rect x="30" y="260" width="120" height="50" rx="6" fill="#f0f9ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="90" y="282" text-anchor="middle" font-weight="600" fill="#1e3a5f" font-size="12">User</text>
+  <text x="90" y="298" text-anchor="middle" fill="#1e3a5f" font-size="11">accept / dismiss</text>
+
+  <!-- Arrow: User → ConflictService -->
+  <line x1="150" y1="285" x2="220" y2="285" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- ConflictService -->
+  <rect x="225" y="260" width="160" height="50" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="305" y="282" text-anchor="middle" font-weight="600" fill="#1e3a5f" font-size="12">ConflictService</text>
+  <text x="305" y="298" text-anchor="middle" fill="#1e3a5f" font-size="11">resolve + fire event</text>
+
+  <!-- Accept path -->
+  <line x1="385" y1="275" x2="440" y2="275" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+  <text x="412" y="268" text-anchor="middle" fill="#2563eb" font-size="10">accept</text>
+
+  <rect x="445" y="255" width="140" height="45" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="515" y="275" text-anchor="middle" font-weight="600" fill="#14532d" font-size="12">Update WorkItem</text>
+  <text x="515" y="291" text-anchor="middle" fill="#14532d" font-size="11">new deadline accepted</text>
+
+  <!-- Dismiss path -->
+  <line x1="385" y1="295" x2="440" y2="340" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+  <text x="400" y="330" fill="#d97706" font-size="10">dismiss</text>
+
+  <rect x="445" y="320" width="140" height="45" rx="6" fill="#fff7ed" stroke="#d97706" stroke-width="1.5"/>
+  <text x="515" y="340" text-anchor="middle" font-weight="600" fill="#78350f" font-size="12">Push to Google</text>
+  <text x="515" y="356" text-anchor="middle" fill="#78350f" font-size="11">CaseHub wins</text>
+
+  <!-- Auto-dismiss note -->
+  <rect x="30" y="350" width="350" height="55" rx="6" fill="#fefce8" stroke="#eab308" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="205" y="370" text-anchor="middle" font-weight="500" fill="#713f12" font-size="11">Auto-dismiss: outbound push from CaseHub resolves</text>
+  <text x="205" y="386" text-anchor="middle" fill="#713f12" font-size="11">stale DETECTED conflicts — no user action needed</text>
+  <text x="205" y="400" text-anchor="middle" fill="#713f12" font-size="11">for conflicts superseded by a CaseHub update</text>
+</svg>
