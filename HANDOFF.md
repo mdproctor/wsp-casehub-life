@@ -1,42 +1,66 @@
 # HANDOFF — casehub-life
 
-**Last updated:** 2026-10-31
-**Branch:** issue-142-calendar-conflict-detection
-**State:** Design complete, implementation plan ready
+**Last updated:** 2026-11-01
+**Branch:** main
+**State:** Between issues — #142 closed, Phase 1 epic updated
 
 ---
 
 ## What Happened This Session
 
-Designed calendar conflict detection (#142) — inbound sync pipeline to
-detect external edits to CaseHub-managed calendar events. Full design
-cycle: brainstorming (11 decisions) → decision review (D5 revised: stored
-field values instead of hash; D10/D11 added) → spec writing → 3-round
-standard spec review (15 findings applied: EventTiming as JSON TEXT,
-outbound push auto-dismiss, @Version optimistic locking, FK-safe mapping
-deletion) → implementation plan (12 tasks, 4 batches).
+Implemented and closed #142 (calendar conflict detection) — the full
+inbound sync pipeline from design through to merged code. Then analysed
+#110 (conversational intake pane) from first principles, concluded it was
+superseded by the avatar integration, and restructured the Phase 1 epic.
 
-No code written. All artifacts are in the workspace.
+### #142 — Calendar conflict detection (closed)
+
+Executed the 12-task implementation plan across 4 batches:
+
+- **Data model** — LifeCalendarSyncState (sync token per calendar),
+  LifeCalendarConflict (DETECTED/ACCEPTED/DISMISSED lifecycle),
+  pushedTiming + @Version on mapping. V116, V117, V2102 migrations.
+- **Sync pipeline** — Quartz-scheduled incremental sync via
+  CalendarPlatform.listEventsSync(). ConflictDetector with echo
+  filtering, idempotency guards, stored field value comparison.
+- **Resolution** — Accept (update WorkItem deadline) or dismiss
+  (push CaseHub state back). Auto-dismiss on outbound push.
+  CalendarConflictLedgerEntry for tamper-evident audit.
+- **REST + UI** — 6 endpoints on LifeCalendarResource. Calendar panel
+  with conflict cards, diff view, accept/dismiss, count badge, SSE refresh.
+
+Squashed to single commit, merged to main, pushed.
+Blog entry: "External Edits Are Signals, Not Commands."
+
+### Epic #139 restructuring
+
+First-principles analysis of #110 (conversational intake pane). Conclusion:
+with the playbook catalogue done (#140, #141) and the neocortex cognitive
+agent planned, #110 would build a temporary LLM classifier that gets
+replaced. The dispatch layer IS the playbook catalogue lookup.
+
+- Closed #110 and #109 as superseded
+- Created #143 (P1.4 — avatar integration)
+- Created #144 (P1.5 — intent resolution via cognitive agent)
+- Created #145 (P1.6 — avatar-driven UI)
+- Updated epic #139 body — P1.1/P1.2/P1.3 marked complete, new issues linked
+
+Also filed connectors#195 — investigation into generic conflict
+reconciliation pattern in connectors-core (not ready to implement,
+needs analysis of banking/IoT/commerce use cases first).
 
 ## Key Decisions
 
-- CaseHub stays authoritative — external edits are signals, not commands
-- Stored field values for change detection (not hash — avoids provider normalization false positives)
-- EventTiming serialized as JSON TEXT (sealed interface: AllDay/Timed)
-- Outbound push auto-dismisses stale DETECTED conflicts
-- Single calendar for now; data model multi-calendar ready
+- #110 superseded — the cognitive agent (neocortex) handles intent
+  classification, not a standalone LLM classifier
+- NLP (#137) is cost optimisation for later, not the initial path
+- Three execution tiers (D3) remain the dispatch model: direct MCP,
+  playbook, engine case
+- Generic reconciliation pattern (connectors#195) deferred until a
+  second connector hits the same problem
 
 ## Next Action
 
-**Resume with `work continue`.** Start executing the plan:
-`plans/2026-10-31-calendar-conflict-detection.md` — 12 tasks, 4 batches.
-
-## References
-
-| Artifact | Path |
-|----------|------|
-| Design spec | `specs/issue-142-calendar-conflict-detection/2026-10-31-calendar-conflict-detection-design.md` |
-| Decisions | `specs/issue-142-calendar-conflict-detection/decisions.md` |
-| Implementation plan | `plans/2026-10-31-calendar-conflict-detection.md` |
-| Decision review | `/Users/mdproctor/reviews/casehub-life/issue-142-decision-20261031-011658/` |
-| Spec review | `/Users/mdproctor/reviews/casehub-life/issue-142-spec-20261031-031704/` |
+Phase 1 remaining work is P1.4 → P1.5 → P1.6 (#143 → #144 → #145).
+All depend on neocortex cognitive architecture being wirable into life.
+Check blocks#311 epic status before starting.
