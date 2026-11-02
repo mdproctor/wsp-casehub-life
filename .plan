@@ -13,3 +13,15 @@ flyway-next-v:
 
 ## Queue
 - [ ] casehubio/life#143 — Issue #143 ← active
+  - [ ] Batch 1: API-types
+    - [ ] Task 1: AvatarEvent sealed interface
+    - [ ] Task 2: LifeDomainContextProvider
+  - [ ] Batch 2: Backend-wiring
+    - [ ] Task 3: Maven deps and config
+    - [ ] Task 4: LifeAvatarDescriptorProvider
+    - [ ] Task 5: LifeCognitiveAgentService
+  - [ ] Batch 3: REST-endpoint
+    - [ ] Task 6: LifeAvatarResource
+  - [ ] Batch 4: Frontend
+    - [ ] Task 7: life-conversation-panel
+    - [ ] Task 8: Home-view integration
