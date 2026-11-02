@@ -25,3 +25,7 @@ flyway-next-v:
   - [x] Batch 4: Frontend
     - [x] Task 7: life-conversation-panel
     - [x] Task 8: Home-view integration
+
+## Deferred
+- [ ] Fix @QuarkusTest SNAPSHOT mismatch (S / Low) [casehubio/work, casehubio/platform] — casehub-work-engine compiled against old NotificationTemplate constructor; needs casehub-work CI rebuild against latest casehub-platform-api SNAPSHOT
+- [ ] Fix Vite build SNAPSHOT mismatches (S / Low) [casehubio/pages, casehubio/mosaic] — pages-schema uses zod looseObject (not exported), mosaic-core missing applyTheme export; needs pages and mosaic CI rebuilds
