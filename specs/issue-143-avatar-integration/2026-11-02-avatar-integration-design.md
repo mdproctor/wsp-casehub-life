@@ -219,8 +219,7 @@ system, not suitable for conversational request/response).
 **Tool safety classification:**
 The avatar introduces prompt injection as a new attack surface — an
 LLM decides which tools to call based on user text, unlike the current
-UI where users click specific endpoints. The system prompt's
-confirmation rules are behavioral guidance, not a security boundary.
+UI where users click specific endpoints.
 
 MCP tools are classified by risk level:
 
@@ -231,19 +230,37 @@ MCP tools are classified by risk level:
 | High-risk mutation | POST life/cases (start case), POST life/tasks/{id}/commit (commitment), POST life/dashboard/oversight-gates | Confirmation required |
 | Restricted | POST life/actors/{id}/personal-data/erase (GDPR), POST life/actors/{id}/delete | Blocked for junior; confirmation required for admin/member |
 
-Enforcement is server-side in `LifeCognitiveAgentService`, not in the
-system prompt. The service observes `AgentEvent.ToolCallComplete` events
-in the response stream and, for high-risk or restricted operations,
-pauses the stream and emits `ConfirmationRequired` before allowing
-the tool execution to proceed. This requires the session to be
-configured with tool execution gating (backend-specific — see below).
+**Phase A enforcement: system prompt (conversational confirmation).**
+The platform `AgentSession` API has no tool execution callback — the
+backend internally manages the model→tool→model loop (`query()` returns
+`Multi<AgentEvent>` as observation-only events, and `AgentSessionInit`
+has no callback field). There is no hook to intercept between "model
+wants a tool" and "tool is executed."
 
-**Backend tool gating:** The `casehub-platform-agent-openai` backend
-must support a tool execution callback that allows the host to approve
-or reject tool calls before they execute against the MCP server. If
-the backend does not support this, the initial implementation uses
-system prompt enforcement with a documented risk acceptance. Server-
-side gating is tracked as a fast-follow.
+Phase A therefore uses system prompt enforcement: the tool safety
+classification table above is encoded as system prompt rules. The LLM
+manages the confirmation flow conversationally — it asks "Should I
+start the boiler repair case?" before calling the tool, and the user
+responds naturally. This is actually more coherent than out-of-band
+confirmation because:
+1. The LLM maintains full conversation history including tool
+   call and result
+2. The confirmation is a natural conversational exchange
+3. No history gap between tool call and tool result (cf. §11)
+
+**Phase B+ aspiration: server-side tool gating.**
+True server-side enforcement requires a platform API extension: a tool
+execution callback in `AgentSessionInit` (e.g.,
+`Function<ToolCallComplete, ToolGatingDecision>`) and backend support
+for pausing before MCP execution. This is tracked as a platform
+dependency. When available, the service can intercept tool calls before
+execution, enforcing the classification table in code rather than in
+the system prompt.
+
+Until server-side gating exists, the system prompt approach is the
+practical reality. The classification table ensures the system prompt
+rules are comprehensive and consistent, even though enforcement is
+advisory rather than programmatic.
 
 **Security note:** @McpDomain-generated REST endpoints currently lack
 @RolesAllowed (LifeRestSecurityTest is disabled). MCP tool access in
@@ -256,8 +273,23 @@ Full MCP auth wiring is tracked separately.
 The avatar's confirmation flow is SEPARATE from the engine's
 ActionRiskClassifier (which gates worker actions during case execution).
 
-**Protocol (POST+SSE):**
-1. Avatar decides a tool call needs confirmation → emits
+**Phase A: conversational confirmation (system prompt).**
+The LLM manages the confirmation flow as part of the conversation. For
+high-risk or restricted tools (per §10 classification), the system
+prompt instructs the avatar to ask "Should I proceed?" before calling
+the tool. The user responds naturally ("yes", "go ahead", "no").
+The LLM then calls or skips the tool — with the full exchange in
+conversation history.
+
+This is the cleanest UX: the confirmation is a natural conversational
+exchange, not a modal dialog. The tool call and result stay in the
+LLM's history, so the avatar knows what it did.
+
+**Phase B+ protocol: out-of-band confirmation (when server-side tool
+gating exists).**
+When the platform API supports tool execution callbacks (see §10):
+
+1. Service intercepts high-risk tool call → emits
    `ConfirmationRequired(actionId, description, consequences)` in the
    SSE stream, followed by `SessionComplete`
 2. Server stores pending confirmation in `LifeCognitiveAgentService`:
@@ -267,12 +299,24 @@ ActionRiskClassifier (which gates worker actions during case execution).
 3. User approves/rejects → `POST /avatar/confirm` with body
    `{"actionId": "...", "approved": true/false}`. Returns SSE stream.
 4. If approved: service executes the stored MCP tool call, streams
-   result events (ToolResult, ActionCard, SessionComplete).
+   result events (ToolResult, ActionCard, SessionComplete). The tool
+   result must also be injected into the LLM's session history (via
+   synthetic tool_result prepended to the next `query()` call) so the
+   LLM knows the action was taken.
 5. If rejected: service removes pending confirmation, streams
    acknowledgment text + SessionComplete.
 
+**Conversation history coherence (Phase B+):** when the out-of-band
+protocol executes a tool call outside the LLM's session, the result is
+NOT in the LLM's conversation history. Without injection, the LLM may
+not know the action was taken and could attempt to call the tool again.
+Mitigation: prepend the confirmed tool result as a synthetic context
+block in the next `query()` call (same pattern as `<domain_context>`).
+
 **Endpoint:** `POST /avatar/confirm` — same `@RolesAllowed` as
-`/avatar/message`. Returns `Multi<SseEvent<AvatarEvent>>`.
+`/avatar/message`. Returns `Multi<SseEvent<AvatarEvent>>`. Defined now
+but used primarily in Phase B+. In Phase A, confirmations happen
+conversationally and this endpoint is not needed.
 
 **Timeout:** pending confirmations expire after 5 minutes
 (configurable via `casehub.life.avatar.confirmation.timeout`). Expired
@@ -284,17 +328,10 @@ a confirmation is pending, the message is processed normally. The
 pending confirmation remains valid until timeout. The avatar may
 reference it in its response.
 
-**System prompt guidance:** the system prompt includes rules for WHEN
-to confirm ("Always confirm before starting a case, creating a
-financial commitment, or approving an oversight gate. Direct lookups,
-status queries, and low-risk task creation can proceed without
-confirmation."). These are behavioral guidance, not the security
-boundary — see §10 tool safety classification for enforcement.
-
-**Junior users:** cannot confirm consequential actions. If the current
-principal has role `household-junior`, the `/avatar/confirm` endpoint
-rejects the request with 403 and the avatar explains that admin or
-member approval is needed.
+**Junior users:** cannot confirm consequential actions. In Phase A, the
+system prompt instructs the avatar to refuse execution for junior users.
+In Phase B+, the `/avatar/confirm` endpoint rejects with 403 for
+`household-junior` on high-risk and restricted operations.
 
 ### Cognitive state persistence (Phase B)
 
@@ -456,20 +493,41 @@ casehub.life.avatar.mcp.server-url=http://localhost:8080/mcp
 
 ### Unit tests
 - `LifeDomainContextProviderTest` — verify context assembly, token budget
-  cap, dirty flag invalidation
+  cap, dirty flag invalidation, `<domain_context>` block construction
 - `AvatarEventTest` — verify complete mapping from AgentEvent (all 6 variants)
   to AvatarEvent (all 8 variants)
 - `LifeAvatarDescriptorProviderTest` — verify descriptor configuration
+- `ContextPrependTest` — dirty flag lifecycle: set on domain event,
+  consumed on next message, prepend format matches spec, no prepend
+  when flag is clean
+- `PendingConfirmationTest` — storage, retrieval by actionId, timeout
+  expiry (5min), lazy cleanup, junior role rejection
 
 ### Integration tests (@QuarkusTest)
-- `LifeAvatarResourceTest` — REST endpoint: message send returns SSE stream,
-  session close, role-based access (admin/member/junior all admitted)
-- `LifeCognitiveAgentServiceTest` — session lifecycle, multi-turn conversation,
-  domain context injection. Uses canned LLM responses (test backend).
+- `LifeAvatarResourceTest` — REST endpoint:
+  - Message send returns SSE stream
+  - Session close
+  - Role-based access (admin/member/junior all admitted)
+  - `POST /avatar/confirm` — approval streams result, rejection
+    streams acknowledgment, expired actionId returns 404, junior
+    returns 403 on restricted operations
+  - `409 Conflict` when in-flight guard blocks concurrent POST
+  - Context prepend when dirty flag is set between messages
+- `LifeCognitiveAgentServiceTest` — session lifecycle:
+  - Multi-turn conversation with canned LLM responses (test backend)
+  - Domain context injection on first message
+  - Per-session AtomicBoolean guard lifecycle (acquire on query start,
+    release on stream completion or error)
+  - PendingConfirmation storage and expiry under SessionPipeline idle
+    eviction
 
 ### Frontend tests
-- `life-conversation-panel` — collapsed/expanded rendering, message display,
-  streaming token append, confirmation dialog, thinking indicator
+- `life-conversation-panel` — collapsed/expanded rendering, message
+  display, streaming token append, confirmation dialog, thinking
+  indicator
+- `FetchSseReaderTest` — POST+SSE response parsing: `\n\n` splitting,
+  `event:` / `data:` field parsing, multi-line data fields, stream
+  error and abort handling, incomplete chunk buffering
 
 ## Scope boundaries
 
