@@ -48,6 +48,11 @@ classpath and injected — cognitive processing activates automatically.
 - SessionPipeline provides idle eviction (PT30M), AIMD admission
   (ceiling 5), and SIZE_AWARE clearing policy — no custom session
   management code needed
+- Per-session in-flight guard: `LifeCognitiveAgentService` maintains
+  an `AtomicBoolean` per session. If a second POST arrives while a
+  query is streaming, return `409 Conflict`. AIMD admission is global
+  (prevents overwhelming the LLM backend), but does not provide
+  per-session mutual exclusion.
 
 Key methods:
 - `sendMessage(principalId, userMessage)` → `Multi<AvatarEvent>` (streaming)
@@ -107,6 +112,8 @@ On each message:
 **4. LifeAvatarResource** (`app/resource/`)
 - REST endpoint for the conversation surface
 - `POST /avatar/message` — send message, returns SSE stream of response events
+- `POST /avatar/confirm` — approve/reject pending confirmation, returns
+  SSE stream of result events. Body: `{"actionId": "...", "approved": true}`
 - `DELETE /avatar/session` — close current session
 - `@RolesAllowed({HouseholdGroups.ADMIN, HouseholdGroups.MEMBER,
   HouseholdGroups.JUNIOR})` — all household roles can converse
@@ -152,8 +159,12 @@ system, not suitable for conversational request/response).
     structured response cards, action confirmations. Positioned as
     absolute overlay on centre content (does not resize dock grid).
 - Transport: `fetch()` POST to `/avatar/message`, response body is SSE
-  stream. Uses the `SSEManager` pattern from LifeEventController for
-  parsing SSE events from a fetch response.
+  stream. Parsed via `fetch()` + `response.body.getReader()` +
+  `TextDecoderStream` — manual `text/event-stream` line parsing. This
+  is NOT `SSEManager` (which wraps browser `EventSource`, GET-only).
+  A new `FetchSseReader` utility in `life-ui/src/utils/` handles the
+  POST response stream: splits on `\n\n`, parses `event:` / `data:`
+  fields, dispatches typed `AvatarEvent` objects to the panel.
 - Message rendering: user bubbles (right), avatar bubbles (left), action
   cards (full-width), confirmation dialogs (modal)
 - Markdown rendering via `marked` + `dompurify` (already in deps)
@@ -197,34 +208,93 @@ system, not suitable for conversational request/response).
 
 ### MCP tool access
 
-**10. Tool registration**
+**10. Tool registration and safety classification**
 - AgentSessionInit.mcpServers configured at session-open time
 - Points at the platform's MCP server endpoint (HTTP MCP transport)
 - All 6 @McpDomain services available: life/tasks, life/actors, life/cases,
   life/dashboard, life/analytics, life/events
 - Playbook execution: via life/cases domain (start case with template)
 - Tool descriptions enriched with domain context for the LLM
-- **Security note:** @McpDomain-generated REST endpoints currently lack
-  @RolesAllowed (LifeRestSecurityTest is disabled). MCP tool access in
-  this issue is gated by the avatar session's own authentication —
-  only authenticated household members can converse with the avatar.
-  Full MCP auth wiring is tracked separately.
+
+**Tool safety classification:**
+The avatar introduces prompt injection as a new attack surface — an
+LLM decides which tools to call based on user text, unlike the current
+UI where users click specific endpoints. The system prompt's
+confirmation rules are behavioral guidance, not a security boundary.
+
+MCP tools are classified by risk level:
+
+| Classification | Tools | Policy |
+|---|---|---|
+| Read-only | life/dashboard, life/analytics, GET on life/tasks, life/actors, life/cases, life/events | Auto-allowed |
+| Low-risk mutation | POST life/tasks (create task) | Auto-allowed |
+| High-risk mutation | POST life/cases (start case), POST life/tasks/{id}/commit (commitment), POST life/dashboard/oversight-gates | Confirmation required |
+| Restricted | POST life/actors/{id}/personal-data/erase (GDPR), POST life/actors/{id}/delete | Blocked for junior; confirmation required for admin/member |
+
+Enforcement is server-side in `LifeCognitiveAgentService`, not in the
+system prompt. The service observes `AgentEvent.ToolCallComplete` events
+in the response stream and, for high-risk or restricted operations,
+pauses the stream and emits `ConfirmationRequired` before allowing
+the tool execution to proceed. This requires the session to be
+configured with tool execution gating (backend-specific — see below).
+
+**Backend tool gating:** The `casehub-platform-agent-openai` backend
+must support a tool execution callback that allows the host to approve
+or reject tool calls before they execute against the MCP server. If
+the backend does not support this, the initial implementation uses
+system prompt enforcement with a documented risk acceptance. Server-
+side gating is tracked as a fast-follow.
+
+**Security note:** @McpDomain-generated REST endpoints currently lack
+@RolesAllowed (LifeRestSecurityTest is disabled). MCP tool access in
+this issue is gated by the avatar session's own authentication —
+only authenticated household members can converse with the avatar.
+Full MCP auth wiring is tracked separately.
 
 **11. Confirmation flow**
-- The avatar's confirmation flow is SEPARATE from the engine's
-  ActionRiskClassifier (which gates worker actions during case execution).
-  The avatar is a conversational agent — it decides when to confirm based
-  on the action type and its system prompt instructions.
-- System prompt includes confirmation rules: "Always confirm before starting
-  a case, creating a financial commitment, or approving an oversight gate.
-  Direct lookups, status queries, and low-risk task creation can proceed
-  without confirmation."
-- Avatar emits ConfirmationRequired event for consequential actions
-- UI renders confirmation dialog with description + consequences
-- User confirms → avatar executes via MCP tool
-- User declines → avatar acknowledges and suggests alternatives
-- Junior users: cannot confirm consequential actions. Avatar explains
-  that admin or member approval is needed.
+
+The avatar's confirmation flow is SEPARATE from the engine's
+ActionRiskClassifier (which gates worker actions during case execution).
+
+**Protocol (POST+SSE):**
+1. Avatar decides a tool call needs confirmation → emits
+   `ConfirmationRequired(actionId, description, consequences)` in the
+   SSE stream, followed by `SessionComplete`
+2. Server stores pending confirmation in `LifeCognitiveAgentService`:
+   `ConcurrentHashMap<String, PendingConfirmation>` keyed by actionId
+   (UUID). Each entry holds: toolName, toolArguments, principalId,
+   createdAt.
+3. User approves/rejects → `POST /avatar/confirm` with body
+   `{"actionId": "...", "approved": true/false}`. Returns SSE stream.
+4. If approved: service executes the stored MCP tool call, streams
+   result events (ToolResult, ActionCard, SessionComplete).
+5. If rejected: service removes pending confirmation, streams
+   acknowledgment text + SessionComplete.
+
+**Endpoint:** `POST /avatar/confirm` — same `@RolesAllowed` as
+`/avatar/message`. Returns `Multi<SseEvent<AvatarEvent>>`.
+
+**Timeout:** pending confirmations expire after 5 minutes
+(configurable via `casehub.life.avatar.confirmation.timeout`). Expired
+entries are removed lazily on next access or by SessionPipeline's
+eviction sweep.
+
+**Interleaving:** if the user sends a regular `/avatar/message` while
+a confirmation is pending, the message is processed normally. The
+pending confirmation remains valid until timeout. The avatar may
+reference it in its response.
+
+**System prompt guidance:** the system prompt includes rules for WHEN
+to confirm ("Always confirm before starting a case, creating a
+financial commitment, or approving an oversight gate. Direct lookups,
+status queries, and low-risk task creation can proceed without
+confirmation."). These are behavioral guidance, not the security
+boundary — see §10 tool safety classification for enforcement.
+
+**Junior users:** cannot confirm consequential actions. If the current
+principal has role `household-junior`, the `/avatar/confirm` endpoint
+rejects the request with 403 and the avatar explains that admin or
+member approval is needed.
 
 ### Cognitive state persistence (Phase B)
 
@@ -243,18 +313,43 @@ conversation history.
 ### Context refresh mid-session
 
 Domain context changes (new SLA breach, case completion) need to reach the
-avatar. Two mechanisms:
+avatar. `AgentSession.query(String prompt)` takes only the user's message;
+there is no `updateSystemPrompt()` method. The system prompt is baked into
+`AgentSessionInit` at session creation.
 
-1. **Dirty flag + rebuild:** Significant domain events set a dirty flag.
-   Next user message triggers domain context rebuild, which is injected
-   as a system-level context update message (not via clear()).
-2. **Fallback: session close + reopen:** If the backend's clear() is a
-   no-op (platform default), fall back to closing and reopening the session.
-   This loses conversation history but ensures fresh context.
+**Mechanism: context prepend to user message.**
+When the dirty flag is set, `LifeCognitiveAgentService` prepends the
+rebuilt domain context to the user's message before calling `query()`:
 
-Note: `AgentSession.clear()` default implementation is empty. The spec
-does NOT rely on it — the dirty flag + context update message approach
-works regardless of the backend's clear() implementation.
+```
+<domain_context>
+Household state as of 2026-11-02T14:30:00Z:
+- 3 overdue tasks (highest: boiler repair, 5 days overdue)
+- SLA breach on task #42 — contractor response overdue
+- 2 active cases: boiler-repair (IN_PROGRESS), school-enrolment (WAITING)
+</domain_context>
+
+What tasks are due today?
+```
+
+The system prompt (set at session creation) includes the instruction:
+"When a `<domain_context>` block appears at the start of a user message,
+treat it as updated household state — do not echo it or treat it as
+user input."
+
+This is the standard approach for mid-session context injection in
+conversation systems. It works with any backend and requires no changes
+to the `AgentSession` API.
+
+**Trigger:** significant domain events (SLA_BREACH, CASE_COMPLETED,
+CALENDAR_CONFLICT_DETECTED) received via SSE set a dirty flag. The next
+user message triggers rebuild + prepend.
+
+**Fallback: session close + reopen.** If the domain context has changed
+so substantially that the system prompt itself needs restructuring (e.g.,
+new capability domains added), close the session and reopen with a fresh
+`AgentSessionInit`. This loses conversation history but is acceptable
+since conversation history is transient in Phase A.
 
 ### Avatar audit trail
 
@@ -304,6 +399,14 @@ Phase A:
 <dependency>
     <groupId>io.casehub</groupId>
     <artifactId>casehub-platform-agent-session-core</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.casehub</groupId>
+    <artifactId>casehub-platform-agent-openai</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.casehub</groupId>
+    <artifactId>casehub-platform-agent-config-core</artifactId>
 </dependency>
 ```
 
