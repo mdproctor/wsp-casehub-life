@@ -31,6 +31,13 @@ Key methods:
 - `sendMessage(sessionId, userMessage)` → `Multi<AvatarEvent>` (streaming)
 - `closeSession(sessionId)`
 
+**AgentProvider implementation:** The existing LifeAgentProviderFactory
+(OpenClaw wrapper) does NOT support openSession(). This issue requires
+a new AgentProvider implementation backed by a direct LLM SDK (e.g.
+casehub-platform-agent-openai for Claude/Anthropic). This replaces
+the OpenClaw wrapper for the avatar use case — engine workers continue
+to use the existing OpenClaw path.
+
 On each message:
 1. Assemble system prompt: eidos descriptor + CognitionCore.promptSections() +
    domain context snapshot
@@ -202,15 +209,77 @@ This issue doesn't require new foundation capabilities. All platform
 primitives needed (AgentProvider, MCP tools, SSE events) are already
 available and wired.
 
+### Cognitive state persistence
+
+CognitionCore accumulates state in-memory during a session, but key
+subsystems persist across sessions via neocortex stores:
+- **MoodState** — persisted via `moodPersister` callback → CaseMemoryStore
+- **UserModel** — persisted via UserModelOrchestrator → CaseMemoryStore
+- **MentalModel** — BDI extractions persisted to CaseMemoryStore
+- **Narrative** — narrative fragments persisted to MindMapStore
+- **Engagement events** — persisted via `engagementPersister` callback
+
+On session start, CognitionCore rehydrates from these stores. The avatar
+does NOT lose personality on tab close — it loses only the in-flight
+conversation history. Mood, learned user preferences, mental model, and
+narrative arc persist across sessions.
+
+Conversation history itself is transient (lost on session close). This is
+acceptable for Phase 1. If conversation persistence is needed later, it
+belongs in neocortex (session serialization), not in a life-specific table.
+
+### Context refresh mid-session
+
+AgentSession.query() takes only a user prompt — there is no
+updateSystemPrompt() method. Domain context changes (new SLA breach,
+case completion) cannot be injected into an active session's system
+prompt directly.
+
+Resolution: use `AgentSession.clear()` to reset context, then send a
+fresh system prompt on the next query. This preserves the session
+(no close/reopen needed) while allowing the system prompt to be
+rebuilt with current domain context. CognitionCore's in-memory
+cognitive state is unaffected by clear() since it lives outside the
+AgentSession.
+
+Trigger: significant domain events (SLA_BREACH, CASE_COMPLETED,
+CALENDAR_CONFLICT_DETECTED) received via SSE trigger a context
+invalidation flag. The next user message causes a clear+rebuild
+before sending to the LLM.
+
+### Avatar audit trail
+
+Avatar-initiated actions must be auditable. When the avatar executes
+an MCP tool that creates, modifies, or deletes data (task creation,
+case start, commitment, GDPR erasure), the tool execution is
+attributed to the user's principal (not the avatar). The avatar is
+an agent acting on behalf of the user — the user's actorId appears
+in ledger entries, not a synthetic avatar actorId.
+
+Tool call events (ToolCallComplete) are logged via the existing
+`LifeEventBroadcaster` SSE infrastructure for UI transparency.
+Full audit of avatar actions can be reconstructed from the ledger
+(same as any other platform action).
+
+### Multi-user model
+
+One avatar per tenant, shared across all household members. All three
+roles (household-admin, household-member, household-junior) converse
+with the same avatar instance. CognitionCore's UserModelOrchestrator
+tracks per-user interaction patterns, and MentalModelOrchestrator
+builds per-user BDI models. The avatar knows who it's talking to via
+CurrentPrincipal.
+
+Oversight gates: when the avatar proposes an action that requires
+admin approval, the ConfirmationRequired event is emitted. If the
+current user lacks the required role, the avatar explains that admin
+approval is needed and does not proceed.
+
 ## Data model
 
-No new JPA entities. No Flyway migrations. CognitionCore state is
-in-memory (per the neocortex architecture — persistence is handled by
-neocortex's memory stores via CaseMemoryStore).
-
-Session state is transient — lost on server restart. This is acceptable
-for Phase 1. If session persistence is needed later, it belongs in
-neocortex (session serialization), not in a life-specific table.
+No new JPA entities. No Flyway migrations. CognitionCore state
+persists via neocortex memory stores (CaseMemoryStore, MindMapStore),
+not via new life-specific tables.
 
 ## Configuration
 
