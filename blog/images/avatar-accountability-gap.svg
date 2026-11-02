@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 320" font-family="system-ui, -apple-system, sans-serif" font-size="13">
+  <rect width="720" height="320" fill="#fafafa" rx="8"/>
+
+  <text x="360" y="28" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">Why "Just Use ChatGPT" Fails for Life Automation</text>
+
+  <!-- Left: Generic chatbot -->
+  <rect x="30" y="50" width="310" height="250" rx="6" fill="#fff" stroke="#fecaca" stroke-width="1.5"/>
+  <text x="185" y="75" text-anchor="middle" font-size="13" font-weight="600" fill="#991b1b">Generic LLM Chatbot</text>
+  <line x1="30" y1="85" x2="340" y2="85" stroke="#fecaca"/>
+
+  <text x="50" y="110" font-size="11" fill="#64748b">✗</text>
+  <text x="65" y="110" font-size="11" fill="#475569">No memory between sessions</text>
+  <text x="50" y="132" font-size="11" fill="#64748b">✗</text>
+  <text x="65" y="132" font-size="11" fill="#475569">No commitment tracking</text>
+  <text x="50" y="154" font-size="11" fill="#64748b">✗</text>
+  <text x="65" y="154" font-size="11" fill="#475569">No SLA deadlines or escalation</text>
+  <text x="50" y="176" font-size="11" fill="#64748b">✗</text>
+  <text x="65" y="176" font-size="11" fill="#475569">No audit trail for decisions</text>
+  <text x="50" y="198" font-size="11" fill="#64748b">✗</text>
+  <text x="65" y="198" font-size="11" fill="#475569">No GDPR erasure capability</text>
+  <text x="50" y="220" font-size="11" fill="#64748b">✗</text>
+  <text x="65" y="220" font-size="11" fill="#475569">No role-based access control</text>
+  <text x="50" y="242" font-size="11" fill="#64748b">✗</text>
+  <text x="65" y="242" font-size="11" fill="#475569">Hallucinated actions look real</text>
+
+  <rect x="50" y="260" width="270" height="25" rx="4" fill="#fef2f2"/>
+  <text x="185" y="277" text-anchor="middle" font-size="11" font-weight="500" fill="#991b1b">"I'll remind you" → forgets instantly</text>
+
+  <!-- Right: CaseHub avatar -->
+  <rect x="380" y="50" width="310" height="250" rx="6" fill="#fff" stroke="#bbf7d0" stroke-width="1.5"/>
+  <text x="535" y="75" text-anchor="middle" font-size="13" font-weight="600" fill="#166534">CaseHub Avatar</text>
+  <line x1="380" y1="85" x2="690" y2="85" stroke="#bbf7d0"/>
+
+  <text x="400" y="110" font-size="11" fill="#16a34a">✓</text>
+  <text x="415" y="110" font-size="11" fill="#475569">Cognitive state persists across sessions</text>
+  <text x="400" y="132" font-size="11" fill="#16a34a">✓</text>
+  <text x="415" y="132" font-size="11" fill="#475569">Commitments tracked with Watchdog</text>
+  <text x="400" y="154" font-size="11" fill="#16a34a">✓</text>
+  <text x="415" y="154" font-size="11" fill="#475569">WorkItems with SLA + escalation policy</text>
+  <text x="400" y="176" font-size="11" fill="#16a34a">✓</text>
+  <text x="415" y="176" font-size="11" fill="#475569">Merkle-chain tamper-evident ledger</text>
+  <text x="400" y="198" font-size="11" fill="#16a34a">✓</text>
+  <text x="415" y="198" font-size="11" fill="#475569">Art.17 erasure with proof certificate</text>
+  <text x="400" y="220" font-size="11" fill="#16a34a">✓</text>
+  <text x="415" y="220" font-size="11" fill="#475569">household-admin / member / junior RBAC</text>
+  <text x="400" y="242" font-size="11" fill="#16a34a">✓</text>
+  <text x="415" y="242" font-size="11" fill="#475569">Real MCP tools — actions are verifiable</text>
+
+  <rect x="400" y="260" width="270" height="25" rx="4" fill="#f0fdf4"/>
+  <text x="535" y="277" text-anchor="middle" font-size="11" font-weight="500" fill="#166534">"Chase Bob for the quote" → tracked, escalated</text>
+</svg>
