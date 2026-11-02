@@ -4,8 +4,8 @@ title: "The Avatar That Does Things"
 date: 2026-11-02
 entry_type: article
 subtype: diary
-projects: [casehubio/life]
-tags: [avatar, conversational-agent, sse, mcp, architecture, cognitive-agent, accountability]
+projects: [casehubio/life, casehubio/casehub-mosaic]
+tags: [avatar, conversational-agent, sse, mcp, architecture, cognitive-agent, accountability, mosaic]
 series: issue-143-avatar-integration
 ---
 
@@ -16,26 +16,6 @@ Personal life automation tools fall into two categories. The first is the forms-
 The second is the chatbot approach: talk to an AI, get advice, maybe it sets a reminder. It doesn't matter which one — ChatGPT, Gemini, Grok, Claude, Siri. They all feel productive in the moment. Then the moment passes. The assistant forgot what you said. The reminder has no escalation policy. The "I'll follow up with the contractor" was a hallucination dressed as a commitment.
 
 casehub-life just gained a third option — an avatar that actually does things, and proves it did them.
-
-## What the avatar replaces
-
-The right dock of the life-ui dashboard used to have a "Comms" panel — a static mock showing three hardcoded cards about school emails and contractor texts. Placeholder text with arrows pointing at extracted entities. "Coming soon."
-
-It's no longer coming soon. The panel now contains a live conversation surface. Type a message, get a streamed response from an LLM that has access to your household's full state — active cases, pending tasks, overdue items, contractor commitments, calendar conflicts — and can act on it.
-
-![Avatar conversation architecture](images/avatar-architecture.svg)
-
-The architecture is deliberately simple. The user sends a POST request with plain text. The server opens (or reuses) a multi-turn LLM session for that user, injects the household's current state into the system prompt, and streams the response back as Server-Sent Events. The frontend parses the SSE stream and renders message bubbles with markdown support.
-
-No WebSocket. No custom protocol. POST in, SSE out.
-
-## Why POST+SSE and not WebSocket
-
-The spec review caught this one before I did. The original design proposed a WebSocket conversation endpoint — bidirectional, full-duplex, the obvious choice for chat. Claude flagged the problem: casehub-life has zero WebSocket infrastructure. No `quarkus-websockets-next` dependency. No WebSocket auth model. No existing patterns to follow.
-
-Meanwhile, the codebase already has a production SSE endpoint (`LifeEventSseResource`) streaming domain events to the dashboard. The pattern is proven: return a `Multi<T>` from a JAX-RS method with `@Produces(SERVER_SENT_EVENTS)`, and Quarkus handles the streaming. Why build new transport infrastructure when the existing one already works?
-
-POST+SSE is also a better semantic fit. A conversation is request-response with a streaming response body — not a persistent bidirectional channel. The user sends a discrete message. The server streams a response. The connection closes. That's an HTTP POST with SSE, not a WebSocket.
 
 ## What makes this different from a chatbot
 
@@ -49,28 +29,60 @@ When the avatar creates a task, it becomes a WorkItem with an SLA deadline and a
 
 Any chatbot — ChatGPT, Grok, Gemini, whatever ships next quarter — can say "I'll remind you." The avatar creates a WorkItem with a breach policy that escalates to the admin channel if the deadline passes. Those are structurally different things.
 
+## The backend — deliberately simple
+
+![Avatar conversation architecture](images/avatar-architecture.svg)
+
+The user sends a POST request with plain text. The server opens (or reuses) a multi-turn LLM session for that user, injects the household's current state into the system prompt, and streams the response back as Server-Sent Events. No WebSocket on the server side. No custom protocol. POST in, SSE out.
+
+The spec review caught the transport decision before any code was written. The original design proposed WebSocket — bidirectional, full-duplex, the obvious choice for chat. Claude flagged the problem: casehub-life has zero WebSocket infrastructure. Meanwhile, the codebase already has a production SSE endpoint streaming domain events to the dashboard. POST+SSE is also a better semantic fit — a conversation is request-response with a streaming body, not a persistent bidirectional channel.
+
+The backend is five new Java classes:
+
+- **LifeCognitiveAgentService** — manages per-user `AgentSession` instances via `AgentProvider.openSession()`. System prompt assembled from an eidos `AgentDescriptor` plus a domain context summary (overdue items, active cases, pending commitments).
+- **LifeAvatarResource** — POST `/avatar/message` returns `Multi<AvatarEvent>` as SSE. DELETE `/avatar/session` closes it. All three household roles admitted.
+- **LifeDomainContextProvider** — assembles the household's current state into a compact prompt summary with a dirty flag that invalidates on domain events.
+- **AvatarEventMapper** — maps platform `AgentEvent` (6 variants) to `AvatarEvent` (8 variants), filtering out noise like partial tool argument deltas.
+- **DemoAvatarAgentProvider** — demo-mode session support with contextual responses, following the existing `DemoCurrentPrincipal` pattern.
+
 ## The cognitive stack — why it's not just a system prompt
 
 The avatar's personality comes from the neocortex CognitionCore — a cognitive orchestrator that manages mood (PAD model), drives, user modelling, mental model (BDI extraction), strategy learning, narrative tracking, and goal proposals. This isn't prompt engineering. It's a graph of numeric states that evolve through interaction and get rendered into prompt sections that shape how the LLM responds.
 
-The catch: CognitionCore's Maven artifacts aren't published yet. The neocortex extraction from blocks (the multi-agent orchestrator) is nearly complete but the last batch hasn't landed. So the current avatar ships as Phase A — the full conversation infrastructure with a static personality defined by an eidos AgentDescriptor. When the neocortex artifacts publish, CognitionCore plugs into the service with no architectural changes. The service already accepts it as an optional dependency.
+CognitionCore's Maven artifacts aren't published yet — the neocortex extraction from blocks is nearly complete but the last batch hasn't landed. So the current avatar ships as Phase A: the full conversation infrastructure with a static personality. When the neocortex artifacts publish, CognitionCore plugs in with no architectural changes.
 
 I designed the split this way on purpose. The conversation surface, MCP tool access, SSE streaming, domain context injection, per-user session management — none of that depends on cognitive state. The avatar works without CognitionCore. It just doesn't evolve.
 
+## Where the pieces actually belong
+
+Building the avatar surfaced an architectural question I should have asked earlier: where do conversation UI components belong?
+
+The initial implementation put a `life-conversation-panel` Lit component directly in life-ui. That was wrong. The conversation surface isn't life-specific — clinical, IoT monitoring, any CaseHub app with a dashboard benefits from a cognitive agent. The same logic that keeps WorkItem lifecycle in casehub-work rather than in application repos applies here: reusable UI belongs in mosaic.
+
+And mosaic already has more than I realised. The `avatar` package has a full conversation panel with 3D TalkingHead rendering, TTS via Kokoro and Piper (50+ voices), speech recognition, and WebSocket transport. The pages platform has an IntelliJ-style dock workbench (`pages-dock-workbench`), milkdown-based markdown editing with read-only mode, a unified SSE/WebSocket transport abstraction (`PushSource`), and an MCP tool adapter that lets external processes push content into live editors.
+
+What mosaic's avatar package lacks is the text-conversation layer: tool call visibility, action cards, confirmation flows, theme flexibility, a text-only mode without the 3D overhead, and token-by-token streaming. Six gaps, now tracked as mosaic#301 through #307. Once those land, life-ui drops its custom panel and consumes the mosaic component — the same pattern as every other mosaic component in the dashboard.
+
+The same boundary applies to cognitive capabilities. Intent classification — understanding what the user wants from free text — is cognitive reasoning. It belongs in neocortex alongside BDI extraction and drive-based decision making, not in an application repo. Life configures the dispatch rules (which intents route to which tier), but the classification itself is a neocortex capability that any CaseHub app can consume.
+
+Two boundary rules crystallised from this work:
+- **Cognitive** → neocortex. Domain application → app repos.
+- **Reusable UI** → mosaic. Domain configuration → app UIs.
+
 ## The design review that changed the spec
 
-I ran two rounds of adversarial design review on this spec — a light decision review (15 findings) and a standard spec review (16 findings across 3 rounds). Between them, they caught:
+I ran two rounds of adversarial design review — a light decision review (15 findings) and a standard spec review (16 findings across 3 rounds). Between them, they caught:
 
-- **CognitionCore isn't on the classpath.** The spec originally said "we consume the existing API." It doesn't exist as a consumable artifact. The phased delivery split was a direct result of this finding.
-- **`AgentSession.clear()` has a no-op default implementation.** The spec relied on it for mid-session context refresh. Claude caught that the interface's default is `void clear() {}` — calling it does nothing unless the backend overrides it. The fix: inject context updates as messages rather than relying on system prompt refresh.
-- **The avatar bypasses the accountability infrastructure.** Engine workers go through risk classification, trust routing, CBR-informed decisions, and attestation pipelines. The avatar was designed as a standalone service that skips all of that. Valid concern, but deliberately chosen — the avatar is a user-facing conversation agent, not a case-execution worker. It starts cases and approves gates; it doesn't execute playbooks.
-- **POST+SSE, not WebSocket.** Covered above. The review caught the transport design flaw before a single line of code was written.
+- **CognitionCore isn't on the classpath.** The spec originally said "we consume the existing API." It doesn't exist as a consumable artifact. The phased delivery split was a direct result.
+- **`AgentSession.clear()` has a no-op default implementation.** The spec relied on it for mid-session context refresh. The fix: inject context updates as messages rather than relying on system prompt refresh.
+- **The avatar bypasses the accountability infrastructure.** Engine workers go through risk classification, trust routing, and attestation pipelines. Valid concern, deliberately chosen — the avatar starts cases and approves gates; it doesn't execute playbooks.
+- **POST+SSE, not WebSocket.** Covered above.
 
-Thirty-one findings across two reviews, and the spec was substantially different afterwards. The reviews took longer than I'd like — the reviewer agents were exploring CognitionCore's 200+ line class in a separate repo — but the findings were worth it.
+Thirty-one findings across two reviews, and the spec was substantially different afterwards.
 
 ## What the avatar opens up
 
-The next two issues in the epic are intent resolution (#144) and avatar-driven UI (#145). Intent resolution adds the three-tier dispatch pipeline: the avatar classifies what the user wants, then routes to a direct MCP call, a parameterised playbook, or a full engine case depending on the action's accountability requirements. Avatar-driven UI transforms the dashboard from a static CRUD interface into a curated experience where the avatar decides what to show.
+The next issues in the epic need rethinking before implementation. Intent resolution (#144) splits between neocortex (cognitive classification) and life (domain dispatch). Avatar-driven UI (#145) is blocked until the mosaic avatar package gains text-conversation support — and those components should be built in mosaic first, not prototyped in life-ui.
 
 The interesting question is what happens when CognitionCore plugs in. The avatar currently has a static personality — helpful, proactive, warm. With CognitionCore, it will develop mood, track ongoing narratives ("the boiler saga"), build a model of each household member, and propose goals based on patterns it observes. The household assistant that remembers you hate dealing with insurance renewals, notices the renewal is coming up, and starts the comparison process before you ask.
 
