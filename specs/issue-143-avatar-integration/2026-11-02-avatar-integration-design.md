@@ -30,19 +30,24 @@ Add CognitionCore wiring: mood, drives, BDI extraction, narrative, user model,
 goal proposals. The avatar gains dynamic personality. Phase B is additive —
 Phase A's architecture is designed so CognitionCore plugs in without redesign.
 
-The separation is clean: LifeCognitiveAgentService takes an optional
-CognitionCore. Phase A passes null; Phase B passes the wired instance.
-CognitionCore's constructor already accepts nullable subsystems.
+The separation is clean: LifeCognitiveAgentService uses CDI optional
+injection (`Instance<CognitionCore>`). Phase A: CognitionCore is absent —
+the service operates without it. Phase B: CognitionCore is on the
+classpath and injected — cognitive processing activates automatically.
 
 ## Architecture
 
 ### Server-side components
 
 **1. LifeCognitiveAgentService** (`app/service/`)
-- `@ApplicationScoped`, manages AgentSession lifecycle per user
-- Optional CognitionCore (nullable — Phase A works without it)
-- Uses `AgentProvider.openSession()` for multi-turn sessions
+- `@ApplicationScoped`, manages conversation sessions via a single
+  application-level `SessionPipeline` (`@ApplicationScoped`)
+- Optional CognitionCore (CDI `Instance<CognitionCore>` — Phase A
+  works without it)
 - Sessions keyed by `tenantId:principalId`, one per user
+- SessionPipeline provides idle eviction (PT30M), AIMD admission
+  (ceiling 5), and SIZE_AWARE clearing policy — no custom session
+  management code needed
 
 Key methods:
 - `sendMessage(principalId, userMessage)` → `Multi<AvatarEvent>` (streaming)
@@ -52,12 +57,20 @@ Key methods:
 (OpenClaw wrapper) does NOT support openSession(). This issue requires
 wiring a real `AgentBackend` implementation (casehub-platform-agent-openai
 for Claude/Anthropic API) via `SessionPoolRegistry` and
-`BackendInstanceRegistry`. Configuration:
-- `SessionPoolRegistry`: one pool, keyed "life-avatar"
-- `PoolDeclaration`: max concurrent sessions = 5, idle timeout = 30m
-- `BackendInstanceRegistry`: register Anthropic backend with model config
+`BackendInstanceRegistry`. Wiring:
+- `BackendInstanceRegistry`: register Anthropic backend instance
+  (key "life-avatar", model from config)
+- `SessionPoolRegistry`: register pool for "life-avatar" backend
+- `SessionLifecycleManager`: wraps SessionPoolRegistry
+- `SessionPipeline`: wraps SessionLifecycleManager. Constructor args:
+  backendKey "life-avatar", ceiling 5, clearAtTokens 50000, idle
+  timeout PT30M. Single `@ApplicationScoped` instance.
 
-Engine workers continue to use the existing OpenClaw invoke() path.
+Engine workers continue to use the existing OpenClaw invoke() path via
+`LifeAgentProviderFactory`. The avatar's `SessionPipeline` is entirely
+separate — it does not modify `LifeAgentProviderFactory`. The factory's
+`openSession()` UnsupportedOperationException remains correct for engine
+workers; the avatar bypasses it entirely via direct backend wiring.
 
 On each message:
 1. Assemble system prompt: eidos descriptor + (CognitionCore.promptSections()
@@ -162,10 +175,10 @@ system, not suitable for conversational request/response).
   classpath. LifeCognitiveAgentService accepts @Inject Instance<CognitionCore>
   (CDI optional injection).
 - All subsystems enabled (CognitionConfig.all())
-- SessionPipeline NOT used per-tenant — SessionPipeline is fleet management
-  infrastructure, overkill for a single avatar. Instead: CognitionCore's
-  internal LLM calls (mood appraisal, BDI) use `AgentProvider.invoke()`
-  directly (single-shot, not multi-turn) via a thin SessionPipeline adapter.
+- The main conversation uses the application-level SessionPipeline
+  (from §1). CognitionCore's own internal LLM calls (mood appraisal,
+  BDI extraction) use `AgentProvider.invoke()` directly — these are
+  single-shot calls, separate from the multi-turn conversation session.
 - MoodOrchestrator: PAD model with life-calibrated defaults
 - DriveOrchestrator: life-specific drives (household efficiency, family
   wellbeing, financial prudence, health vigilance)
@@ -294,7 +307,8 @@ Phase A:
 </dependency>
 ```
 
-Phase B (when published):
+Phase B (when published — artifact names provisional, to be confirmed
+when neocortex Phase 2 publishes):
 ```xml
 <dependency>
     <groupId>io.casehub</groupId>
