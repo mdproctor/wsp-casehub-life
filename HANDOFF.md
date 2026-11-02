@@ -1,66 +1,92 @@
 # HANDOFF — casehub-life
 
-**Last updated:** 2026-11-01
+**Last updated:** 2026-11-02
 **Branch:** main
-**State:** Between issues — #142 closed, Phase 1 epic updated
+**State:** #143 landed, #144/#145 need rethinking
 
 ---
 
 ## What Happened This Session
 
-Implemented and closed #142 (calendar conflict detection) — the full
-inbound sync pipeline from design through to merged code. Then analysed
-#110 (conversational intake pane) from first principles, concluded it was
-superseded by the avatar integration, and restructured the Phase 1 epic.
+Designed, implemented, and landed #143 (avatar integration — P1.4).
+Then discovered architectural boundary issues that reshape #144 and #145.
 
-### #142 — Calendar conflict detection (closed)
+### #143 — Avatar integration (landed)
 
-Executed the 12-task implementation plan across 4 batches:
+Full brainstorming cycle (9 decisions, 31 review findings across two
+adversarial reviews), implementation plan (8 tasks, 4 batches), and
+execution. Squashed to single commit on main.
 
-- **Data model** — LifeCalendarSyncState (sync token per calendar),
-  LifeCalendarConflict (DETECTED/ACCEPTED/DISMISSED lifecycle),
-  pushedTiming + @Version on mapping. V116, V117, V2102 migrations.
-- **Sync pipeline** — Quartz-scheduled incremental sync via
-  CalendarPlatform.listEventsSync(). ConflictDetector with echo
-  filtering, idempotency guards, stored field value comparison.
-- **Resolution** — Accept (update WorkItem deadline) or dismiss
-  (push CaseHub state back). Auto-dismiss on outbound push.
-  CalendarConflictLedgerEntry for tamper-evident audit.
-- **REST + UI** — 6 endpoints on LifeCalendarResource. Calendar panel
-  with conflict cards, diff view, accept/dismiss, count badge, SSE refresh.
+**Backend (5 classes):**
+- `AvatarEvent` — sealed interface, 8 variants in api/
+- `LifeCognitiveAgentService` — per-user AgentSession management
+- `LifeAvatarResource` — POST+SSE conversation endpoint
+- `LifeDomainContextProvider` — life state summary for system prompt
+- `LifeAvatarDescriptorProvider` — eidos identity for the avatar
+- `DemoAvatarAgentProvider` — demo-mode multi-turn sessions
+- `AvatarEventMapper` — AgentEvent → AvatarEvent (filters ToolCallDelta)
 
-Squashed to single commit, merged to main, pushed.
-Blog entry: "External Edits Are Signals, Not Commands."
+**Frontend:**
+- `life-conversation-panel` — Lit 3.x, SSE streaming, markdown, dock panel
+- Replaces comms-mock in right dock
+- Vite config: missing aliases fixed, /avatar proxy added
 
-### Epic #139 restructuring
+**Key design decisions:**
+- POST+SSE, not WebSocket (matches existing LifeEventSseResource pattern)
+- Phase A without CognitionCore (artifacts not published yet)
+- All three household roles admitted (@RolesAllowed)
+- delegatedVia: "avatar" audit marker for avatar-initiated actions
 
-First-principles analysis of #110 (conversational intake pane). Conclusion:
-with the playbook catalogue done (#140, #141) and the neocortex cognitive
-agent planned, #110 would build a temporary LLM classifier that gets
-replaced. The dispatch layer IS the playbook catalogue lookup.
+**Blockers discovered (pre-existing, not caused by #143):**
+- @QuarkusTest broken: casehub-work-engine NotificationTemplate constructor
+  changed upstream. Needs casehub-work CI rebuild.
+- Vite build broken: pages-schema zod export, mosaic-core applyTheme
+  export. Needs pages and mosaic CI rebuilds.
 
-- Closed #110 and #109 as superseded
-- Created #143 (P1.4 — avatar integration)
-- Created #144 (P1.5 — intent resolution via cognitive agent)
-- Created #145 (P1.6 — avatar-driven UI)
-- Updated epic #139 body — P1.1/P1.2/P1.3 marked complete, new issues linked
+### Architectural boundary corrections
 
-Also filed connectors#195 — investigation into generic conflict
-reconciliation pattern in connectors-core (not ready to implement,
-needs analysis of banking/IoT/commerce use cases first).
+Post-implementation conversation surfaced two rules:
+
+1. **Cognitive → neocortex.** Intent classification, BDI extraction,
+   drive-based reasoning belong in neocortex. Life configures dispatch
+   rules and domain context, not cognitive capabilities.
+
+2. **Reusable UI → mosaic.** The conversation panel, action cards,
+   confirmation dialogs belong in mosaic's avatar package — not in
+   life-ui. Mosaic already has a full avatar panel with 3D, TTS/STT.
+   Pages has dock workbench, milkdown, PushSource, MCP tool adapter.
+
+**Issues filed:**
+- life#146 — migration tracking (move conversation panel to mosaic)
+- mosaic#301 — epic: avatar text-conversation support
+- mosaic#302-307 — six gap issues (tool visibility, action cards,
+  confirmation flow, theme tokens, text-only mode, streaming)
+
+### #144 needs splitting
+
+Currently scoped as "intent resolution" all in life. Should split:
+- **neocortex issue** — intent classification (cognitive: free text →
+  structured intent, informed by drives/goals/mental model)
+- **life issue** — dispatch wiring (domain: intent → tier selection →
+  MCP/playbook/case, parameter extraction resolving life entities)
+
+### #145 blocked
+
+Avatar-driven UI is blocked until mosaic#301 lands. The dashboard
+transformation should use mosaic components, not build new ones in
+life-ui.
 
 ## Key Decisions
 
-- #110 superseded — the cognitive agent (neocortex) handles intent
-  classification, not a standalone LLM classifier
-- NLP (#137) is cost optimisation for later, not the initial path
-- Three execution tiers (D3) remain the dispatch model: direct MCP,
-  playbook, engine case
-- Generic reconciliation pattern (connectors#195) deferred until a
-  second connector hits the same problem
+- Cognitive capabilities → neocortex, not app repos
+- Reusable UI → mosaic, not app UIs
+- #144 needs neocortex/life split before brainstorming
+- #145 blocked on mosaic#301 (avatar text-conversation epic)
+- CognitionCore deferred to Phase B (artifacts not published)
 
 ## Next Action
 
-Phase 1 remaining work is P1.4 → P1.5 → P1.6 (#143 → #144 → #145).
-All depend on neocortex cognitive architecture being wirable into life.
-Check blocks#311 epic status before starting.
+1. Split #144 into neocortex + life issues
+2. Fix SNAPSHOT mismatches (work, pages, mosaic CI rebuilds)
+3. Work mosaic#301 epic (avatar text-conversation support)
+4. Then resume life epic #139 with corrected issue scoping
