@@ -13,7 +13,7 @@ series: issue-143-avatar-integration
 
 Personal life automation tools fall into two categories. The first is the forms-and-lists approach: create a task, set a deadline, check it off. Calendar apps, to-do lists, Notion boards. They work until you forget to check them, which is most of the time.
 
-The second is the chatbot approach: talk to an AI, get advice, maybe it sets a reminder. ChatGPT, Siri, Google Assistant. They feel productive in the moment. Then the moment passes. The assistant forgot what you said. The reminder has no escalation policy. The "I'll follow up with the contractor" was a hallucination dressed as a commitment.
+The second is the chatbot approach: talk to an AI, get advice, maybe it sets a reminder. It doesn't matter which one — ChatGPT, Gemini, Grok, Claude, Siri. They all feel productive in the moment. Then the moment passes. The assistant forgot what you said. The reminder has no escalation policy. The "I'll follow up with the contractor" was a hallucination dressed as a commitment.
 
 casehub-life just gained a third option — an avatar that actually does things, and proves it did them.
 
@@ -37,17 +37,17 @@ Meanwhile, the codebase already has a production SSE endpoint (`LifeEventSseReso
 
 POST+SSE is also a better semantic fit. A conversation is request-response with a streaming response body — not a persistent bidirectional channel. The user sends a discrete message. The server streams a response. The connection closes. That's an HTTP POST with SSE, not a WebSocket.
 
-## What makes this different from ChatGPT
+## What makes this different from a chatbot
 
 The avatar has MCP tool access. When it says "I'll create a task for that," it means it. The platform's `@McpDomain` annotation generates dual MCP/REST endpoints from annotated service classes — six domains are already wired: tasks, actors, cases, dashboard, analytics, events. The avatar's LLM session is configured with these tools at session-open time. The LLM calls them during the conversation. The tool results stream back to the UI as structured events.
 
 This is the gap that generic chatbots cannot close:
 
-![Why generic chatbots fail for life automation](images/avatar-accountability-gap.svg)
+![Why chatbots fail at life automation](images/avatar-accountability-gap.svg)
 
 When the avatar creates a task, it becomes a WorkItem with an SLA deadline and an escalation policy. When it starts a contractor follow-up, that becomes a case with commitment tracking and a Watchdog that fires if the contractor doesn't respond. When it touches personal data, that goes through the GDPR-compliant Merkle-chain ledger. When it approves a financial decision, the approval is tamper-evident and attributable.
 
-A generic chatbot can say "I'll remind you." The avatar creates a WorkItem with a breach policy that escalates to the admin channel if the deadline passes. Those are structurally different things.
+Any chatbot — ChatGPT, Grok, Gemini, whatever ships next quarter — can say "I'll remind you." The avatar creates a WorkItem with a breach policy that escalates to the admin channel if the deadline passes. Those are structurally different things.
 
 ## The cognitive stack — why it's not just a system prompt
 

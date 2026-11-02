@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 320" font-family="system-ui, -apple-system, sans-serif" font-size="13">
   <rect width="720" height="320" fill="#fafafa" rx="8"/>
 
-  <text x="360" y="28" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">Why "Just Use ChatGPT" Fails for Life Automation</text>
+  <text x="360" y="28" text-anchor="middle" font-size="15" font-weight="600" fill="#1e293b">Why Chatbots Fail at Life Automation</text>
 
   <!-- Left: Generic chatbot -->
   <rect x="30" y="50" width="310" height="250" rx="6" fill="#fff" stroke="#fecaca" stroke-width="1.5"/>
