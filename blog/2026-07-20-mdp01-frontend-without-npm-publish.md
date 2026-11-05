@@ -23,7 +23,7 @@ Today I discovered they didn't need to be published at all.
 blocks-ui's own examples directory already solved this problem. Each component import maps via a Vite `resolve.alias` to the source directory in the sibling repo:
 
 ```typescript
-{ find: '@casehubio/blocks-ui-core',
+{ find: '@casehubio/agency-ui-core',
   replacement: resolve(blocksUi, 'packages/blocks-ui-core/src') }
 ```
 
