@@ -1,3 +1,12 @@
+---
+layout: post
+title: "Agents Need Eyes, Not Just Ears"
+date: 2026-07-07
+entry_type: note
+subtype: diary
+projects: [casehubio/life]
+---
+
 # Agents Need Eyes, Not Just Ears
 
 **Date:** 2026-07-07

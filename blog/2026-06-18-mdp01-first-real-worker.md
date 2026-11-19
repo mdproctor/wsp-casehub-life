@@ -4,6 +4,9 @@ date: 2026-06-18
 series: casehub-life
 entry: mdp01
 tags: [casehub-life, layer-7, openClaw, langchain4j, quarkus, testing]
+entry_type: note
+subtype: diary
+projects: [casehubio/life]
 ---
 
 The `book-appointment-agent` now calls an actual LLM. That's the headline.
